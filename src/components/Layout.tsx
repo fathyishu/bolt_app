@@ -208,21 +208,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </AnimatePresence>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-surface-200 border-b border-white/5 flex-shrink-0">
-          <button onClick={() => setMobileOpen(true)}
-            className="p-3 -ml-1 rounded-xl text-white/60 hover:text-white hover:bg-white/8 active:bg-white/10 transition-colors touch-manipulation"
-            style={{ minWidth: 44, minHeight: 44 }}>
-            <Menu className="w-6 h-6" />
+        <header className="lg:hidden flex items-center bg-surface-200 border-b border-white/5 flex-shrink-0" style={{ minHeight: 56 }}>
+          <button
+            onClick={() => setMobileOpen(v => !v)}
+            className="flex items-center gap-3 px-4 h-full touch-manipulation"
+            style={{ minWidth: 56, minHeight: 56 }}
+            aria-label="Open menu"
+          >
+            {mobileOpen
+              ? <X className="w-6 h-6 text-white/70" />
+              : <Menu className="w-6 h-6 text-white/70" />}
           </button>
-          <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-gold-500" />
-            <span className="text-white font-bold text-sm">MJ Sports CRM</span>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Trophy className="w-5 h-5 text-gold-500 flex-shrink-0" />
+            <span className="text-white font-bold text-sm truncate">MJ Sports CRM</span>
           </div>
-          <button onClick={() => setMobileOpen(false)}
-            className="ml-auto p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
-            style={{ display: mobileOpen ? 'block' : 'none' }}>
-            <X className="w-5 h-5" />
-          </button>
         </header>
 
         <main className="flex-1 overflow-y-auto">
