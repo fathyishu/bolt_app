@@ -210,8 +210,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-surface-200 border-b border-white/5 flex-shrink-0">
           <button onClick={() => setMobileOpen(true)}
-            className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors">
-            <Menu className="w-5 h-5" />
+            className="p-3 -ml-1 rounded-xl text-white/60 hover:text-white hover:bg-white/8 active:bg-white/10 transition-colors touch-manipulation"
+            style={{ minWidth: 44, minHeight: 44 }}>
+            <Menu className="w-6 h-6" />
           </button>
           <div className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-gold-500" />
