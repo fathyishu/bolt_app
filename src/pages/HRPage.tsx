@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserCheck, Clock, Calendar, Cake, ChevronDown, ChevronUp,
   CheckCircle, XCircle, Plus, AlertCircle, Zap, RefreshCw,
-  Package, Users, Shield, Coffee,
+  Package, Users, Shield, Coffee, Archive, AlertTriangle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -242,7 +242,7 @@ function AttendanceTab() {
 
   useEffect(() => {
     async function load() {
-      const { data: p } = await supabase.from('profiles').select('*').neq('role', 'admin').order('full_name');
+      const { data: p } = await supabase.from('profiles').select('*').eq('is_active', true).neq('role', 'admin').order('full_name');
       if (p) {
         setProfiles(p as Profile[]);
         const times: Record<string, string> = {};
@@ -345,6 +345,12 @@ function LeaveTab() {
   const [leaveReason, setLeaveReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState('');
+
+  const MAX_LEAVES = 2;
+  const MAX_WFH = 2;
 
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -353,16 +359,16 @@ function LeaveTab() {
   const load = useCallback(async () => {
     const [{ data: bals }, { data: profs }] = await Promise.all([
       supabase.from('leave_balances').select('*').eq('month', month).eq('year', year),
-      supabase.from('profiles').select('*').neq('role', 'admin').order('full_name'),
+      supabase.from('profiles').select('*').eq('is_active', true).neq('role', 'admin').order('full_name'),
     ]);
     if (bals) setBalances(bals as LeaveBalance[]);
-    if (profs) { setProfiles(profs as Profile[]); }
+    if (profs) setProfiles(profs as Profile[]);
   }, [month, year]);
 
   useEffect(() => { load(); }, [load]);
 
   function getBalance(userId: string) {
-    return balances.find(b => b.user_id === userId) ?? { id: '', user_id: userId, month, year, leaves_remaining: 2, wfh_remaining: 4 };
+    return balances.find(b => b.user_id === userId) ?? { id: '', user_id: userId, month, year, leaves_remaining: MAX_LEAVES, wfh_remaining: MAX_WFH };
   }
 
   async function handleLogLeave(e: React.FormEvent) {
@@ -370,11 +376,19 @@ function LeaveTab() {
     if (!me || !selectedUser) return;
     setSaving(true);
     setSaveMsg('');
+    setSaveError('');
+
     const bal = getBalance(selectedUser);
     const field = leaveType === 'leave' ? 'leaves_remaining' : 'wfh_remaining';
     const current = leaveType === 'leave' ? bal.leaves_remaining : bal.wfh_remaining;
+    const max = leaveType === 'leave' ? MAX_LEAVES : MAX_WFH;
 
-    // Insert leave request as already-approved
+    if (current <= 0) {
+      setSaveError(`This employee has used all ${max} ${leaveType === 'leave' ? 'leave(s)' : 'WFH day(s)'} for this month.`);
+      setSaving(false);
+      return;
+    }
+
     await supabase.from('leave_requests').insert({
       user_id: selectedUser,
       type: leaveType,
@@ -385,20 +399,52 @@ function LeaveTab() {
       reviewed_at: new Date().toISOString(),
     });
 
-    // Deduct balance
     const existingBal = balances.find(b => b.user_id === selectedUser);
     if (existingBal) {
       await supabase.from('leave_balances').update({ [field]: Math.max(0, current - 1) }).eq('id', existingBal.id);
     } else {
       await supabase.from('leave_balances').insert({
-        user_id: selectedUser, month, year, leaves_remaining: 2, wfh_remaining: 4,
-        [field]: leaveType === 'leave' ? 1 : 3,
+        user_id: selectedUser, month, year,
+        leaves_remaining: MAX_LEAVES,
+        wfh_remaining: MAX_WFH,
+        [field]: leaveType === 'leave' ? MAX_LEAVES - 1 : MAX_WFH - 1,
       });
     }
 
-    setSaveMsg(`Leave logged. ${current > 0 ? `${current - 1} ${leaveType === 'leave' ? 'leave(s)' : 'WFH day(s)'} remaining.` : 'Balance exhausted.'}`);
+    setSaveMsg(`Leave logged. ${current - 1} ${leaveType === 'leave' ? 'leave(s)' : 'WFH day(s)'} remaining.`);
     setSaving(false);
     setLeaveReason('');
+    load();
+  }
+
+  async function handleResetMonth() {
+    if (!me) return;
+    if (!confirm(`Archive ${new Date(year, month - 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' })} leave data and reset all balances to ${MAX_LEAVES}L / ${MAX_WFH}W? This cannot be undone.`)) return;
+    setResetting(true);
+    setResetMsg('');
+
+    // Snapshot current balances
+    const snapshot = profiles.map(p => {
+      const bal = getBalance(p.id);
+      return { user_id: p.id, full_name: p.full_name, leaves_remaining: bal.leaves_remaining, wfh_remaining: bal.wfh_remaining };
+    });
+
+    await supabase.from('monthly_leave_archives').insert({ month, year, archived_by: me.id, data: snapshot });
+
+    // Reset all balances
+    for (const bal of balances) {
+      await supabase.from('leave_balances').update({ leaves_remaining: MAX_LEAVES, wfh_remaining: MAX_WFH }).eq('id', bal.id);
+    }
+    // Create fresh balances for anyone who doesn't have one
+    for (const p of profiles) {
+      const existing = balances.find(b => b.user_id === p.id);
+      if (!existing) {
+        await supabase.from('leave_balances').insert({ user_id: p.id, month, year, leaves_remaining: MAX_LEAVES, wfh_remaining: MAX_WFH });
+      }
+    }
+
+    setResetMsg('Month archived and all balances reset.');
+    setResetting(false);
     load();
   }
 
@@ -409,7 +455,7 @@ function LeaveTab() {
         <div className="flex items-center gap-2 mb-4">
           <Calendar className="w-4 h-4 text-gold-500" />
           <span className="text-white font-semibold">Log Leave / WFH</span>
-          <span className="text-white/30 text-xs">HR directly records taken leave and deducts balance</span>
+          <span className="text-white/30 text-xs">Max: {MAX_LEAVES} leaves · {MAX_WFH} WFH per month</span>
         </div>
         <form onSubmit={handleLogLeave} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -447,12 +493,28 @@ function LeaveTab() {
                 className="input-dark w-full" />
             </div>
           </div>
-          {selectedUser && (
-            <div className="p-3 rounded-xl bg-surface-50/30 text-sm">
-              <span className="text-white/40">Current balance: </span>
-              <span className="text-emerald-400 font-medium">{getBalance(selectedUser).leaves_remaining} leave</span>
-              <span className="text-white/30 mx-2">·</span>
-              <span className="text-blue-400 font-medium">{getBalance(selectedUser).wfh_remaining} WFH</span>
+          {selectedUser && (() => {
+            const bal = getBalance(selectedUser);
+            const leavesUsed = MAX_LEAVES - bal.leaves_remaining;
+            const wfhUsed = MAX_WFH - bal.wfh_remaining;
+            return (
+              <div className="p-3 rounded-xl bg-surface-50/30 text-sm flex flex-wrap gap-4">
+                <div>
+                  <span className="text-white/40">Leaves: </span>
+                  <span className={`font-medium ${bal.leaves_remaining === 0 ? 'text-red-400' : 'text-emerald-400'}`}>{bal.leaves_remaining} remaining</span>
+                  <span className="text-white/20 ml-1">({leavesUsed}/{MAX_LEAVES} used)</span>
+                </div>
+                <div>
+                  <span className="text-white/40">WFH: </span>
+                  <span className={`font-medium ${bal.wfh_remaining === 0 ? 'text-red-400' : 'text-blue-400'}`}>{bal.wfh_remaining} remaining</span>
+                  <span className="text-white/20 ml-1">({wfhUsed}/{MAX_WFH} used)</span>
+                </div>
+              </div>
+            );
+          })()}
+          {saveError && (
+            <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />{saveError}
             </div>
           )}
           {saveMsg && (
@@ -472,19 +534,37 @@ function LeaveTab() {
 
       {/* Balance Overview */}
       <div className="glass-card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Users className="w-4 h-4 text-gold-500" />
-          <span className="text-white font-semibold text-sm">Balances — {new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })}</span>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-gold-500" />
+            <span className="text-white font-semibold text-sm">Balances — {new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })}</span>
+            <span className="text-white/30 text-xs">({MAX_LEAVES}L / {MAX_WFH}W max per month)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {resetMsg && <span className="text-emerald-400 text-xs">{resetMsg}</span>}
+            <button onClick={handleResetMonth} disabled={resetting}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-medium hover:bg-red-500/20 transition-all disabled:opacity-40">
+              {resetting ? <div className="w-3 h-3 border border-red-400/30 border-t-red-400 rounded-full animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+              Reset & Store Data
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
           {profiles.map(p => {
             const bal = getBalance(p.id);
             return (
-              <div key={p.id} className="p-3 rounded-xl bg-surface-50/30 text-center">
-                <div className="text-white/70 text-xs font-medium truncate mb-1">{p.full_name}</div>
-                <div className="flex justify-center gap-3 text-xs">
-                  <span className={`font-bold ${bal.leaves_remaining === 0 ? 'text-red-400' : 'text-emerald-400'}`}>{bal.leaves_remaining}L</span>
-                  <span className={`font-bold ${bal.wfh_remaining === 0 ? 'text-red-400' : 'text-blue-400'}`}>{bal.wfh_remaining}W</span>
+              <div key={p.id} className="p-3 rounded-xl bg-surface-50/30">
+                <div className="text-white/70 text-xs font-medium truncate mb-1.5">{p.full_name}</div>
+                <div className="flex justify-between text-xs gap-2">
+                  <div className="flex flex-col items-center">
+                    <span className={`font-bold text-sm ${bal.leaves_remaining === 0 ? 'text-red-400' : 'text-emerald-400'}`}>{bal.leaves_remaining}</span>
+                    <span className="text-white/30">leave</span>
+                  </div>
+                  <div className="w-px bg-white/10" />
+                  <div className="flex flex-col items-center">
+                    <span className={`font-bold text-sm ${bal.wfh_remaining === 0 ? 'text-red-400' : 'text-blue-400'}`}>{bal.wfh_remaining}</span>
+                    <span className="text-white/30">WFH</span>
+                  </div>
                 </div>
               </div>
             );

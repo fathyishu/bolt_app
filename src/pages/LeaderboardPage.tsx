@@ -83,6 +83,7 @@ export default function LeaderboardPage() {
         .from('profiles')
         .select('*')
         .neq('role', 'admin')
+        .eq('is_active', true)
         .order('monthly_pieces', { ascending: false })
         .limit(10);
       if (monthly) setMonthlyTop(monthly as Profile[]);
@@ -91,6 +92,7 @@ export default function LeaderboardPage() {
         .from('profiles')
         .select('*')
         .neq('role', 'admin')
+        .eq('is_active', true)
         .order('lifetime_pieces', { ascending: false })
         .limit(10);
       if (career) setCareerLegends(career as Profile[]);

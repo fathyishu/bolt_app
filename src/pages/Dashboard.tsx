@@ -3,7 +3,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Flame, TrendingUp, Target, Award, Users, ChevronRight, Zap,
-  Clock, CheckCircle, XCircle, Timer, Megaphone, BarChart3,Calendar,
+  Clock, CheckCircle, XCircle, Timer, Megaphone, BarChart3, Calendar,
+  Cake, CheckSquare, AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, Lead, EodReport, ReviewSchedule, ClosingNewsFeed } from '../lib/supabase';
@@ -103,6 +104,10 @@ export default function Dashboard() {
   const [reviewSchedules, setReviewSchedules] = useState<ReviewSchedule[]>([]);
   const [newsFeed, setNewsFeed] = useState<ClosingNewsFeed[]>([]);
   const [conversionRate, setConversionRate] = useState<number | null>(null);
+  const [mySlices, setMySlices] = useState(0);
+  const [totalSlices, setTotalSlices] = useState(0);
+  const [cakeLeaders, setCakeLeaders] = useState<{ name: string; slices: number }[]>([]);
+  const [weeklyTasksDone, setWeeklyTasksDone] = useState<boolean | null>(null);
 
   const loadDashboard = useCallback(async () => {
     if (!profile) return;
@@ -142,6 +147,48 @@ export default function Dashboard() {
         const totalClosed = verifiedReports.reduce((s: number, r: any) => s + (r.closed_deals || 0), 0);
         const totalContacted = verifiedReports.reduce((s: number, r: any) => s + (r.new_leads_contacted || 0), 0);
         if (totalContacted > 0) setConversionRate(Math.round((totalClosed / totalContacted) * 100 * 10) / 10);
+      }
+
+      // Late cake slices
+      const cycleId = new Date().toISOString().slice(0, 7);
+      const { data: allSlices } = await supabase
+        .from('late_cake_slices')
+        .select('*, profile:profiles(full_name)')
+        .eq('cycle_id', cycleId);
+      if (allSlices) {
+        const total = allSlices.reduce((s: number, r: any) => s + r.slices, 0);
+        setTotalSlices(total);
+        const mine = allSlices.find((s: any) => s.user_id === profile.id);
+        setMySlices(mine?.slices || 0);
+        const leaders = allSlices
+          .filter((s: any) => s.slices > 0)
+          .sort((a: any, b: any) => b.slices - a.slices)
+          .slice(0, 5)
+          .map((s: any) => ({ name: s.profile?.full_name || 'Unknown', slices: s.slices }));
+        setCakeLeaders(leaders);
+      }
+
+      // Weekly tasks ring: tasks assigned to me due this week
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+
+      const { data: weeklyTasks } = await supabase
+        .from('tasks')
+        .select('status')
+        .eq('assigned_to', profile.id)
+        .gte('due_date', startOfWeek.toISOString().split('T')[0])
+        .lte('due_date', endOfWeek.toISOString().split('T')[0]);
+
+      if (weeklyTasks && weeklyTasks.length > 0) {
+        const allDone = weeklyTasks.every((t: any) => t.status === 'done');
+        setWeeklyTasksDone(allDone);
+      } else {
+        setWeeklyTasksDone(null);
       }
     }
   }, [profile]);
@@ -379,6 +426,66 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Weekly Task Performance Ring */}
+      {weeklyTasksDone !== null && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          className={`glass-card p-4 flex items-center gap-4 border ${weeklyTasksDone ? 'border-emerald-500/30' : 'border-red-500/30'}`}
+          style={{ background: weeklyTasksDone ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)' }}>
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 border-2 ${weeklyTasksDone ? 'border-emerald-500 bg-emerald-500/10' : 'border-red-500 bg-red-500/10'}`}
+            style={{ boxShadow: weeklyTasksDone ? '0 0 16px rgba(16,185,129,0.4)' : '0 0 16px rgba(239,68,68,0.4)' }}>
+            {weeklyTasksDone
+              ? <CheckSquare className="w-6 h-6 text-emerald-400" />
+              : <AlertTriangle className="w-6 h-6 text-red-400" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className={`font-bold text-sm ${weeklyTasksDone ? 'text-emerald-400' : 'text-red-400'}`}>
+              {weeklyTasksDone ? 'Weekly task completed — very good, congratulations!' : 'Weekly Task Pending'}
+            </div>
+            <div className="text-white/40 text-xs mt-0.5">
+              {weeklyTasksDone ? 'All tasks for this week are done.' : 'You have tasks due this week that need attention.'}
+            </div>
+          </div>
+          <a href="/tasks" className={`text-xs px-3 py-1.5 rounded-lg font-medium flex-shrink-0 transition-all ${weeklyTasksDone ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25' : 'bg-red-500/15 text-red-400 hover:bg-red-500/25'}`}>
+            View Tasks
+          </a>
+        </motion.div>
+      )}
+
+      {/* Late Cake Wall */}
+      {(totalSlices > 0 || mySlices > 0) && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5">
+          <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+            <Cake className="w-4 h-4 text-gold-500" /> Late Cake Board
+            <span className="ml-1 text-white/30 text-xs font-normal">Company accountability — {new Date().toISOString().slice(0, 7)}</span>
+          </h3>
+          <div className="flex items-center gap-4 mb-3 flex-wrap">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-white/40">Company total:</span>
+              <span className="text-gold-500 font-bold">{totalSlices} slices</span>
+              <span className="text-white/20">·</span>
+              <span className="text-amber-400 font-medium">{Math.floor(totalSlices / 10)} cake{Math.floor(totalSlices / 10) !== 1 ? 's' : ''}</span>
+            </div>
+            {mySlices > 0 && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-white/40">Your slices:</span>
+                <span className="text-red-400 font-bold">{mySlices}</span>
+              </div>
+            )}
+          </div>
+          {cakeLeaders.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {cakeLeaders.map((c, i) => (
+                <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-50/30 text-xs">
+                  <span className="text-gold-500 font-bold">{i + 1}.</span>
+                  <span className="text-white/70">{c.name}</span>
+                  <span className="text-amber-400 font-medium">{c.slices}s</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      )}
+
       {/* Closing News Feed + Quick Actions */}
       <div className="grid lg:grid-cols-2 gap-4">
         {/* Closing News Feed */}
@@ -398,7 +505,7 @@ export default function Dashboard() {
                 <span className="text-lg flex-shrink-0">🎉</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-white text-sm font-medium truncate">
-                    <span className="text-gold-500">{item.staff_name}</span> just closed a deal!
+                    <span className="text-gold-500">{item.staff_name}</span> just closed a deal{item.pieces_count > 0 ? ` — ${item.pieces_count} pieces!` : '!'}
                   </div>
                   {item.lead_title && <div className="text-white/30 text-xs truncate">{item.lead_title}</div>}
                 </div>

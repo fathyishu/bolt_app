@@ -348,6 +348,30 @@ export default function ProfilePage({ viewUserId }: Props) {
                   ))}
                 </div>
               </div>
+
+              {/* Coming Soon: Team Performance Rewards */}
+              <div className="glass-card p-5 relative overflow-hidden" style={{ border: '1px solid rgba(255,215,0,0.15)' }}>
+                <div className="absolute inset-0 opacity-5" style={{ background: 'radial-gradient(ellipse at bottom right, #FFD700, transparent 60%)' }} />
+                <div className="relative flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xl">🏆</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-white font-bold text-sm">Team Performance Rewards</h3>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-500 border border-gold-500/20 font-medium">Coming Soon</span>
+                    </div>
+                    <p className="text-white/40 text-sm leading-relaxed">
+                      Earn team-wide rewards, compete for monthly prizes, and unlock exclusive perks based on collective performance. Leaderboard bonuses, streak rewards, and more — launching soon.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {['Monthly Prizes', 'Team Bonuses', 'Streak Rewards', 'Exclusive Perks'].map(tag => (
+                        <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-surface-50/50 text-white/30 border border-white/5">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

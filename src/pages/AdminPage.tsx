@@ -45,7 +45,7 @@ export default function AdminPage() {
   const [authEmails, setAuthEmails] = useState<Record<string, string>>({});
 
   async function loadProfiles() {
-    const { data } = await supabase.from('profiles').select('*').order('monthly_pieces', { ascending: false });
+    const { data } = await supabase.from('profiles').select('*').eq('is_active', true).order('monthly_pieces', { ascending: false });
     if (data) {
       setProfiles(data as Profile[]);
       const targets: Record<string, number> = {};
@@ -174,8 +174,11 @@ export default function AdminPage() {
 
   async function handleDeleteUser(userId: string, name: string) {
     if (!isAdmin) return;
-    if (!confirm(`Delete ${name}? This removes their account permanently.`)) return;
-    await supabase.from('profiles').delete().eq('id', userId);
+    if (!confirm(`Deactivate ${name}? Their account will be hidden from live views but historical data is preserved.`)) return;
+    await supabase.from('profiles').update({
+      is_active: false,
+      deleted_at: new Date().toISOString(),
+    }).eq('id', userId);
     setProfiles(prev => prev.filter(p => p.id !== userId));
   }
 

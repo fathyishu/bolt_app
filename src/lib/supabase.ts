@@ -10,11 +10,14 @@ export type Role = 'admin' | 'hr' | 'manager' | 'sales_executive';
 export type LeadStatus =
   | 'new_lead'
   | 'follow_up'
+  | 'pre_booking'
   | 'dead_lead'
   | 'bill_declined'
   | 'pending_payment'
   | 'cod_lead'
   | 'closed_lead';
+
+export type PaymentType = 'prepaid' | 'cod';
 
 export type EodStatus = 'pending' | 'verified' | 'rejected';
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
@@ -35,6 +38,8 @@ export interface Profile {
   manager_daily_target: number;
   streak_frozen: boolean;
   about: string;
+  is_active: boolean;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -46,6 +51,12 @@ export interface Lead {
   phone: string;
   email: string;
   status: LeadStatus;
+  payment_type: PaymentType | null;
+  date_of_entry: string | null;
+  follow_up_date: string | null;
+  date_of_closing: string | null;
+  date_of_dispatch: string | null;
+  date_of_delivery: string | null;
   pieces_count: number;
   next_payment_date: string | null;
   last_follow_up: string | null;
@@ -74,6 +85,7 @@ export interface EodReport {
   verified_by: string | null;
   verified_at: string | null;
   rejection_reason: string | null;
+  submitted_at: string | null;
   created_at: string;
   profile?: Profile;
 }
@@ -149,6 +161,7 @@ export interface ClosingNewsFeed {
   user_id: string;
   staff_name: string;
   lead_title: string;
+  pieces_count: number;
   created_at: string;
 }
 
@@ -214,6 +227,15 @@ export interface LeaveBalance {
   year: number;
   leaves_remaining: number;
   wfh_remaining: number;
+}
+
+export interface MonthlyLeaveArchive {
+  id: string;
+  month: number;
+  year: number;
+  archived_by: string | null;
+  archived_at: string;
+  data: { user_id: string; full_name: string; leaves_remaining: number; wfh_remaining: number }[];
 }
 
 export interface LevelThreshold {
