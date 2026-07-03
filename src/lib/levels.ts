@@ -6,6 +6,7 @@ export interface Level {
   icon: string;
 }
 
+// Static fallback — used before DB loads and for seeding defaults
 export const LEVELS: Level[] = [
   { name: 'Rookie', minPieces: 0, color: '#9ca3af', bgColor: 'rgba(156,163,175,0.15)', icon: '🎯' },
   { name: 'Novice', minPieces: 50, color: '#60a5fa', bgColor: 'rgba(96,165,250,0.15)', icon: '📈' },
@@ -25,17 +26,21 @@ export const LEVELS: Level[] = [
   { name: 'GOAT', minPieces: 25000, color: '#FFD700', bgColor: 'rgba(255,215,0,0.35)', icon: '🐐' },
 ];
 
-export function getLevel(lifetimePieces: number): { current: Level; next: Level | null; progress: number; piecesLeft: number } {
+export type LevelResult = { current: Level; next: Level | null; progress: number; piecesLeft: number };
+
+// computeLevel accepts a dynamic level array (from DB) or falls back to static LEVELS
+export function computeLevel(lifetimePieces: number, levels: Level[] = LEVELS): LevelResult {
+  const sorted = [...levels].sort((a, b) => a.minPieces - b.minPieces);
   let currentIndex = 0;
-  for (let i = LEVELS.length - 1; i >= 0; i--) {
-    if (lifetimePieces >= LEVELS[i].minPieces) {
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    if (lifetimePieces >= sorted[i].minPieces) {
       currentIndex = i;
       break;
     }
   }
 
-  const current = LEVELS[currentIndex];
-  const next = currentIndex < LEVELS.length - 1 ? LEVELS[currentIndex + 1] : null;
+  const current = sorted[currentIndex];
+  const next = currentIndex < sorted.length - 1 ? sorted[currentIndex + 1] : null;
 
   let progress = 100;
   let piecesLeft = 0;
@@ -50,4 +55,9 @@ export function getLevel(lifetimePieces: number): { current: Level; next: Level 
   }
 
   return { current, next, progress, piecesLeft };
+}
+
+// Legacy alias — still works but uses static LEVELS
+export function getLevel(lifetimePieces: number): LevelResult {
+  return computeLevel(lifetimePieces, LEVELS);
 }

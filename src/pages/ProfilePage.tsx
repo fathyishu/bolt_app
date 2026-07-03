@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, History, Award, Users, Star, Flame, Trophy, CreditCard as Edit2, Check, X, TrendingUp, Target, Calendar, Shield, ChevronRight, Zap, Lock } from 'lucide-react';
 import { supabase, Profile, CycleSnapshot, PerformanceCycle } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { getLevel, LEVELS } from '../lib/levels';
+import { useLevels } from '../contexts/LevelsContext';
 
 type Tab = 'about' | 'history' | 'achievements' | 'team';
 
@@ -65,9 +65,11 @@ interface Props { viewUserId?: string }
 
 export default function ProfilePage({ viewUserId }: Props) {
   const { profile: me, refreshProfile } = useAuth();
+  const { getLevel, levels: LEVELS } = useLevels();
   const [tab, setTab] = useState<Tab>('about');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [snapshots, setSnapshots] = useState<(CycleSnapshot & { cycle: PerformanceCycle })[]>([]);
+  const [leaveHistory, setLeaveHistory] = useState<any[]>([]);
   const [teammates, setTeammates] = useState<Profile[]>([]);
   const [selectedTeammate, setSelectedTeammate] = useState<Profile | null>(null);
   const [editingAbout, setEditingAbout] = useState(false);
@@ -82,12 +84,19 @@ export default function ProfilePage({ viewUserId }: Props) {
     const { data } = await supabase.from('profiles').select('*').eq('id', targetUserId).maybeSingle();
     if (data) setProfile(data as Profile);
 
-    const { data: snaps } = await supabase
-      .from('cycle_snapshots')
-      .select('*, cycle:performance_cycles(*)')
-      .eq('user_id', targetUserId)
-      .order('created_at', { ascending: false });
+    const [{ data: snaps }, { data: leaves }] = await Promise.all([
+      supabase.from('cycle_snapshots')
+        .select('*, cycle:performance_cycles(*)')
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false }),
+      supabase.from('leave_requests')
+        .select('*, reviewer:profiles!leave_requests_reviewed_by_fkey(full_name)')
+        .eq('user_id', targetUserId)
+        .order('date', { ascending: false })
+        .limit(40),
+    ]);
     if (snaps) setSnapshots(snaps as any);
+    if (leaves) setLeaveHistory(leaves);
   }, [targetUserId]);
 
   useEffect(() => {
@@ -300,6 +309,43 @@ export default function ProfilePage({ viewUserId }: Props) {
                   </div>
                 </motion.div>
               ))}
+
+              {/* Leave History */}
+              <div className="glass-card p-5">
+                <h3 className="text-white font-semibold flex items-center gap-2 mb-4 text-sm">
+                  <Calendar className="w-4 h-4 text-gold-500" /> Leave & WFH History
+                  <span className="text-white/30 text-xs font-normal">({leaveHistory.length} records)</span>
+                </h3>
+                {leaveHistory.length === 0 ? (
+                  <div className="text-white/30 text-sm text-center py-4">No leave records.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {leaveHistory.map((r: any) => (
+                      <div key={r.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-50/30">
+                        <div className="flex items-center gap-2.5">
+                          <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${r.type === 'leave' ? 'bg-emerald-500/15' : 'bg-blue-500/15'}`}>
+                            {r.type === 'leave' ? '📅' : '🏠'}
+                          </span>
+                          <div>
+                            <div className="text-white/80 text-sm font-medium">
+                              {new Date(r.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                            </div>
+                            {r.reason && <div className="text-white/30 text-xs">{r.reason}</div>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${r.type === 'leave' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-blue-500/15 text-blue-400'}`}>
+                            {r.type === 'leave' ? 'Leave' : 'WFH'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${r.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400' : r.status === 'rejected' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                            {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LevelsProvider } from './contexts/LevelsContext';
 import Layout from './components/Layout';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
@@ -101,7 +102,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <LevelsProvider>
+          <AppRoutes />
+        </LevelsProvider>
       </AuthProvider>
     </BrowserRouter>
   );

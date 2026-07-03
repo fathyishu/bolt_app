@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Trophy, Crown, Medal, Star, TrendingUp } from 'lucide-react';
 import { supabase, Profile, TrophyCase } from '../lib/supabase';
-import { getLevel } from '../lib/levels';
+import { useLevels } from '../contexts/LevelsContext';
 
 function PodiumBlock({ rank, profile, pieces }: { rank: 1 | 2 | 3; profile: Profile | null; pieces: number }) {
+  const { getLevel } = useLevels();
   const heights = { 1: 'h-36', 2: 'h-24', 3: 'h-20' };
   const colors = {
     1: { main: '#FFD700', bg: 'rgba(255,215,0,0.15)', border: 'rgba(255,215,0,0.4)' },
@@ -71,6 +72,7 @@ function PodiumBlock({ rank, profile, pieces }: { rank: 1 | 2 | 3; profile: Prof
 }
 
 export default function LeaderboardPage() {
+  const { getLevel } = useLevels();
   const [monthlyTop, setMonthlyTop] = useState<Profile[]>([]);
   const [careerLegends, setCareerLegends] = useState<Profile[]>([]);
   const [trophyHistory, setTrophyHistory] = useState<TrophyCase[]>([]);

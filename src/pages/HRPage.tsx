@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserCheck, Clock, Calendar, Cake, ChevronDown, ChevronUp,
   CheckCircle, XCircle, Plus, AlertCircle, Zap, RefreshCw,
-  Package, Users, Shield, Coffee, Archive, AlertTriangle,
+  Package, Users, Shield, Coffee, Archive, AlertTriangle, History,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -11,7 +11,7 @@ import {
   LeaveRequest, LeaveBalance, LateCakeSlice, BreakLog,
 } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { getLevel } from '../lib/levels';
+import { useLevels } from '../contexts/LevelsContext';
 
 type Tab = 'verify' | 'attendance' | 'leave' | 'breaks' | 'cake';
 
@@ -42,6 +42,7 @@ interface QueueItem extends EodReport { profile: Profile }
 
 function VerifyTab() {
   const { profile: me } = useAuth();
+  const { getLevel } = useLevels();
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [verifying, setVerifying] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -339,6 +340,7 @@ function LeaveTab() {
   const { profile: me } = useAuth();
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [leaveHistory, setLeaveHistory] = useState<(LeaveRequest & { profile: Profile; reviewer: Profile | null })[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [leaveType, setLeaveType] = useState<'leave' | 'wfh'>('leave');
   const [leaveDate, setLeaveDate] = useState(new Date().toISOString().split('T')[0]);
@@ -357,12 +359,17 @@ function LeaveTab() {
   const year = now.getFullYear();
 
   const load = useCallback(async () => {
-    const [{ data: bals }, { data: profs }] = await Promise.all([
+    const [{ data: bals }, { data: profs }, { data: hist }] = await Promise.all([
       supabase.from('leave_balances').select('*').eq('month', month).eq('year', year),
       supabase.from('profiles').select('*').eq('is_active', true).neq('role', 'admin').order('full_name'),
+      supabase.from('leave_requests')
+        .select('*, profile:profiles!leave_requests_user_id_fkey(*), reviewer:profiles!leave_requests_reviewed_by_fkey(*)')
+        .order('created_at', { ascending: false })
+        .limit(80),
     ]);
     if (bals) setBalances(bals as LeaveBalance[]);
     if (profs) setProfiles(profs as Profile[]);
+    if (hist) setLeaveHistory(hist as (LeaveRequest & { profile: Profile; reviewer: Profile | null })[]);
   }, [month, year]);
 
   useEffect(() => { load(); }, [load]);
@@ -571,11 +578,56 @@ function LeaveTab() {
           })}
         </div>
       </div>
+
+      {/* Leave History */}
+      <div className="glass-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <History className="w-4 h-4 text-gold-500" />
+          <span className="text-white font-semibold text-sm">Leave History</span>
+          <span className="text-white/30 text-xs">Last 80 entries</span>
+        </div>
+        {leaveHistory.length === 0 ? (
+          <div className="text-white/30 text-sm text-center py-6">No leave records yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-white/30 text-xs uppercase tracking-wider border-b border-white/5">
+                  <th className="text-left pb-2 pr-3">Employee</th>
+                  <th className="text-left pb-2 pr-3">Date</th>
+                  <th className="text-left pb-2 pr-3">Type</th>
+                  <th className="text-left pb-2 pr-3">Status</th>
+                  <th className="text-left pb-2 pr-3">Reason</th>
+                  <th className="text-left pb-2">Logged by</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {leaveHistory.map(r => (
+                  <tr key={r.id} className="text-white/70 hover:bg-white/3 transition-colors">
+                    <td className="py-2 pr-3 font-medium text-white/90 whitespace-nowrap">{r.profile?.full_name ?? '—'}</td>
+                    <td className="py-2 pr-3 text-white/50 whitespace-nowrap">{new Date(r.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                    <td className="py-2 pr-3">
+                      <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${r.type === 'leave' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-blue-500/15 text-blue-400'}`}>
+                        {r.type === 'leave' ? 'Leave' : 'WFH'}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${r.status === 'approved' ? 'bg-emerald-500/15 text-emerald-400' : r.status === 'rejected' ? 'bg-red-500/15 text-red-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                        {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-white/40 max-w-[160px] truncate">{r.reason || '—'}</td>
+                    <td className="py-2 text-white/40 text-xs whitespace-nowrap">{r.reviewer?.full_name ?? 'Self'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
-// ── Break Monitor Tab ────────────────────────────────────────────────────────
 function BreakTab() {
   const { profile: me } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);

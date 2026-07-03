@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase, Profile, Lead, LeadStatus, CycleSnapshot } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { getLevel } from '../lib/levels';
+import { useLevels } from '../contexts/LevelsContext';
 
 const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
   new_lead:        { label: 'New Lead',        color: '#3b82f6' },
@@ -33,6 +33,7 @@ function StatPill({ value, label, color }: { value: number | string; label: stri
 }
 
 function RepCard({ rep }: { rep: RepRow }) {
+  const { getLevel } = useLevels();
   const [expanded, setExpanded] = useState(false);
   const { profile, leads } = rep;
   const level = getLevel(profile.lifetime_pieces);

@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Flame, Crown, Zap, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, Profile } from '../lib/supabase';
-import { getLevel } from '../lib/levels';
+import { useLevels } from '../contexts/LevelsContext';
 
 export default function TvMode() {
   const navigate = useNavigate();
+  const { getLevel } = useLevels();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [tick, setTick] = useState(0);
 
@@ -197,6 +198,7 @@ export default function TvMode() {
 function LeaderCard({ rank, profile, medalColor, medalIcon, isTop = false }: {
   rank: number; profile: Profile; medalColor: string; medalIcon: string; isTop?: boolean;
 }) {
+  const { getLevel } = useLevels();
   const level = getLevel(profile.lifetime_pieces);
   return (
     <div className={`text-center w-full ${isTop ? '' : 'opacity-90'}`}>

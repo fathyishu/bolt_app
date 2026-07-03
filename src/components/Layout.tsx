@@ -3,8 +3,8 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutDashboard, Users, FileText, BarChart3, CheckSquare, Settings, LogOut, Trophy, Menu, X, Tv, ChevronRight, Flame, ShieldCheck, Shield, CircleUser as UserCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLevels } from '../contexts/LevelsContext';
 import { supabase } from '../lib/supabase';
-import { getLevel } from '../lib/levels';
 
 interface NavItem {
   to: string;
@@ -16,6 +16,7 @@ interface NavItem {
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { profile, signOut } = useAuth();
+  const { getLevel } = useLevels();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingEod, setPendingEod] = useState(0);

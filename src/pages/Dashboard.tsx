@@ -7,8 +7,8 @@ import {
   Cake, CheckSquare, AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLevels } from '../contexts/LevelsContext';
 import { supabase, Lead, EodReport, ReviewSchedule, ClosingNewsFeed } from '../lib/supabase';
-import { getLevel } from '../lib/levels';
 import AdminDashboard from './AdminDashboard';
 
 function StatCard({ label, value, icon, color, suffix = '' }: {
@@ -96,6 +96,7 @@ function Countdown({ target, label, icon }: { target: Date; label: string; icon:
 
 export default function Dashboard() {
   const { profile, refreshProfile } = useAuth();
+  const { getLevel } = useLevels();
   const [todayLeads, setTodayLeads] = useState<Lead[]>([]);
   const [followUpCount, setFollowUpCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
