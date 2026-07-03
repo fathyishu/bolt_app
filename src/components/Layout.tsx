@@ -208,7 +208,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </AnimatePresence>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="lg:hidden flex items-center bg-surface-200 border-b border-white/5 flex-shrink-0" style={{ minHeight: 56 }}>
+        <header
+          className="lg:hidden flex items-center bg-surface-200 border-b border-white/5 flex-shrink-0"
+          style={{ paddingTop: 'env(safe-area-inset-top)', minHeight: 'calc(56px + env(safe-area-inset-top))' }}
+        >
           <button
             onClick={() => setMobileOpen(v => !v)}
             className="flex items-center gap-3 px-4 h-full touch-manipulation"
