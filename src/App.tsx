@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import LeadsPage from './pages/LeadsPage';
+import CustomersPage from './pages/CustomersPage';
 import EodPage from './pages/EodPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import TasksPage from './pages/TasksPage';
@@ -67,7 +68,9 @@ function AppRoutes() {
             <Layout>
               <Routes>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/leads" element={<LeadsPage />} />
+                <Route path="/sales" element={<LeadsPage />} />
+                <Route path="/leads" element={<Navigate to="/sales" replace />} />
+                <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/eod" element={<EodPage />} />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />
                 <Route path="/tasks" element={<TasksPage />} />

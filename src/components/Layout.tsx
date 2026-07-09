@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, FileText, BarChart3, CheckSquare, Settings, LogOut, Trophy, Menu, X, Tv, ChevronRight, Flame, ShieldCheck, Shield, CircleUser as UserCircle } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, BarChart3, CheckSquare, Settings, LogOut, Trophy, Menu, X, Tv, ChevronRight, Flame, ShieldCheck, Shield, CircleUser as UserCircle, TrendingUp, BookUser } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLevels } from '../contexts/LevelsContext';
 import { supabase } from '../lib/supabase';
@@ -49,7 +49,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems: NavItem[] = [
     { to: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" />, label: 'Dashboard' },
-    { to: '/leads', icon: <Users className="w-5 h-5" />, label: 'Leads' },
+    { to: '/sales', icon: <TrendingUp className="w-5 h-5" />, label: 'Sales' },
+    { to: '/customers', icon: <BookUser className="w-5 h-5" />, label: 'Customers' },
     { to: '/eod', icon: <FileText className="w-5 h-5" />, label: 'EOD Report' },
     { to: '/leaderboard', icon: <BarChart3 className="w-5 h-5" />, label: 'Leaderboard' },
     { to: '/tasks', icon: <CheckSquare className="w-5 h-5" />, label: 'Tasks' },

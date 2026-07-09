@@ -44,8 +44,23 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface Customer {
+  id: string;
+  full_name: string;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  notes: string;
+  added_by: string | null;
+  created_at: string;
+  updated_at: string;
+  added_by_profile?: Profile;
+}
+
 export interface Lead {
   id: string;
+  customer_id: string | null;
   title: string;
   contact_name: string;
   phone: string;
@@ -57,14 +72,33 @@ export interface Lead {
   date_of_closing: string | null;
   date_of_dispatch: string | null;
   date_of_delivery: string | null;
+  tracking_id: string;
+  cod_payment_updated: boolean;
+  cod_payment_updated_at: string | null;
   pieces_count: number;
   next_payment_date: string | null;
   last_follow_up: string | null;
   assigned_to: string | null;
+  owner_id: string | null;
   notes: string;
   created_at: string;
   updated_at: string;
   profile?: Profile;
+  customer?: Customer;
+}
+
+export interface MonthlyTarget {
+  id: string;
+  user_id: string;
+  month: number;
+  year: number;
+  target1: number;
+  target2: number;
+  target3: number;
+  reward_amount: number;
+  reward_label: string;
+  set_by: string | null;
+  updated_at: string;
 }
 
 export interface EodReport {
@@ -244,4 +278,11 @@ export interface LevelThreshold {
   min_pieces: number;
   updated_by: string | null;
   updated_at: string;
+}
+
+// Commission tier helper
+export function getCommissionRate(lifetimePieces: number, monthlyPieces: number, target2: number): number {
+  if (target2 > 0 && monthlyPieces >= target2) return 8;
+  if (lifetimePieces >= 5000) return 6;
+  return 4;
 }

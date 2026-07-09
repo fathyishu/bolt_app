@@ -5,10 +5,11 @@ import {
   UserPlus, X, Eye, EyeOff, Trash2, Key, Snowflake as SnowflakeIcon,
   TrendingUp, Calendar, Clock, CreditCard, Timer,
 } from 'lucide-react';
-import { supabase, Profile, Role, LevelThreshold, ReviewSchedule } from '../lib/supabase';
+import { supabase, Profile, Role, LevelThreshold, ReviewSchedule, MonthlyTarget } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { getCommissionRate } from '../lib/supabase';
 
-type AdminTab = 'team' | 'credentials' | 'levels' | 'schedules';
+type AdminTab = 'team' | 'credentials' | 'levels' | 'schedules' | 'targets';
 
 export default function AdminPage() {
   const { profile: currentUser } = useAuth();
@@ -25,6 +26,13 @@ export default function AdminPage() {
   const [schedules, setSchedules] = useState<ReviewSchedule[]>([]);
   const [scheduleEdits, setScheduleEdits] = useState<Record<string, Partial<ReviewSchedule>>>({});
   const [savingSchedule, setSavingSchedule] = useState<Record<string, boolean>>({});
+
+  // Monthly targets state
+  const [targets, setTargets] = useState<MonthlyTarget[]>([]);
+  const [targetEdits, setTargetEdits] = useState<Record<string, { target1: number; target2: number; target3: number; reward_amount: number; reward_label: string }>>({});
+  const [savingTarget, setSavingTarget] = useState<Record<string, boolean>>({});
+  const [targetMonth, setTargetMonth] = useState(new Date().getMonth() + 1);
+  const [targetYear, setTargetYear] = useState(new Date().getFullYear());
 
   const isAdmin = currentUser?.role === 'admin';
 
@@ -104,6 +112,48 @@ export default function AdminPage() {
     }
     load();
   }, []);
+
+  async function loadTargets() {
+    const now = new Date();
+    const mo = targetMonth || now.getMonth() + 1;
+    const yr = targetYear || now.getFullYear();
+    const { data } = await supabase.from('monthly_targets').select('*').eq('month', mo).eq('year', yr);
+    if (data) {
+      setTargets(data as MonthlyTarget[]);
+      const edits: Record<string, { target1: number; target2: number; target3: number; reward_amount: number; reward_label: string }> = {};
+      profiles.forEach(p => {
+        const existing = (data as MonthlyTarget[]).find(t => t.user_id === p.id);
+        edits[p.id] = {
+          target1: existing?.target1 ?? 0,
+          target2: existing?.target2 ?? 0,
+          target3: existing?.target3 ?? 0,
+          reward_amount: existing?.reward_amount ?? 0,
+          reward_label: existing?.reward_label ?? '',
+        };
+      });
+      setTargetEdits(edits);
+    }
+  }
+
+  async function handleSaveTarget(userId: string) {
+    const me = profiles.find(p => p.id === userId);
+    if (!me) return;
+    setSavingTarget(prev => ({ ...prev, [userId]: true }));
+    const edit = targetEdits[userId];
+    const existing = targets.find(t => t.user_id === userId);
+    if (existing) {
+      await supabase.from('monthly_targets').update({
+        ...edit, set_by: me?.id, updated_at: new Date().toISOString(),
+      }).eq('id', existing.id);
+    } else {
+      await supabase.from('monthly_targets').insert({
+        user_id: userId, month: targetMonth, year: targetYear, ...edit,
+        set_by: me?.id,
+      });
+    }
+    await loadTargets();
+    setSavingTarget(prev => ({ ...prev, [userId]: false }));
+  }
 
   async function handleRoleChange(userId: string, newRole: Role) {
     if (!isAdmin) return;
@@ -292,6 +342,7 @@ export default function AdminPage() {
           { key: 'credentials', label: 'Credentials', icon: <Key className="w-4 h-4" /> },
           { key: 'levels', label: 'Level Thresholds', icon: <TrendingUp className="w-4 h-4" /> },
           { key: 'schedules', label: 'Review Schedules', icon: <Timer className="w-4 h-4" /> },
+          { key: 'targets', label: 'Targets & Commission', icon: <Target className="w-4 h-4" /> },
         ] as { key: AdminTab; label: string; icon: React.ReactNode }[]).map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${tab === t.key ? 'bg-gold-500/15 text-gold-500 border border-gold-500/30' : 'text-white/50 hover:text-white/80 hover:bg-white/5'}`}>
@@ -718,6 +769,179 @@ export default function AdminPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* ── Targets & Commission ── */}
+          {tab === 'targets' && (
+            <div className="space-y-5">
+              {/* Commission Tier Info */}
+              <div className="glass-card p-5">
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2 text-sm">
+                  <CreditCard className="w-4 h-4 text-gold-500" /> Commission Tier System
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-4 rounded-xl bg-surface-50/30 border border-white/5">
+                    <div className="text-white/40 text-xs uppercase tracking-wider mb-2">Tier 1 — Base Closer</div>
+                    <div className="text-2xl font-bold text-white">₹4<span className="text-sm font-normal text-white/40">/piece</span></div>
+                    <div className="text-white/30 text-xs mt-1">Less than 5,000 lifetime pieces</div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                    <div className="text-amber-400 text-xs uppercase tracking-wider mb-2">Tier 2 — Elite Closer</div>
+                    <div className="text-2xl font-bold text-white">₹6<span className="text-sm font-normal text-white/40">/piece</span></div>
+                    <div className="text-white/30 text-xs mt-1">5,000+ lifetime pieces</div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <div className="text-emerald-400 text-xs uppercase tracking-wider mb-2">Target 2 Activator</div>
+                    <div className="text-2xl font-bold text-white">₹8<span className="text-sm font-normal text-white/40">/piece</span></div>
+                    <div className="text-white/30 text-xs mt-1">When monthly Target 2 is hit</div>
+                  </div>
+                </div>
+                <div className="mt-4 p-3 rounded-xl bg-white/3 text-white/40 text-xs space-y-1">
+                  <div>• <strong className="text-white/60">Target 1</strong> — Minimum performance baseline for the month</div>
+                  <div>• <strong className="text-white/60">Target 2</strong> — Hitting this overrides base tier and unlocks ₹8/piece for the cycle</div>
+                  <div>• <strong className="text-white/60">Target 3</strong> — Custom salary/reward milestone (amount editable below)</div>
+                </div>
+              </div>
+
+              {/* Current rep commission statuses */}
+              <div className="glass-card p-5">
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2 text-sm">
+                  <Users className="w-4 h-4 text-gold-500" /> Live Commission Status
+                </h3>
+                <div className="space-y-2">
+                  {profiles.filter(p => p.role === 'sales_executive').map(p => {
+                    const t2 = targets.find(t => t.user_id === p.id)?.target2 ?? 0;
+                    const rate = getCommissionRate(p.lifetime_pieces, p.monthly_pieces, t2);
+                    return (
+                      <div key={p.id} className="flex items-center gap-4 p-3 rounded-xl bg-surface-50/30">
+                        <div className="w-8 h-8 rounded-full bg-gold-500/10 border border-gold-500/20 flex items-center justify-center text-gold-500 font-bold text-sm flex-shrink-0">
+                          {p.full_name[0]?.toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-white/80 text-sm font-medium">{p.full_name}</div>
+                          <div className="text-white/30 text-xs">Lifetime: {p.lifetime_pieces.toLocaleString()} · Monthly: {p.monthly_pieces.toLocaleString()}</div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className={`font-bold text-sm ${rate === 8 ? 'text-emerald-400' : rate === 6 ? 'text-amber-400' : 'text-white/60'}`}>
+                            ₹{rate}/piece
+                          </div>
+                          <div className="text-white/30 text-xs">
+                            {rate === 8 ? 'Target Bonus' : rate === 6 ? 'Elite Closer' : 'Base Tier'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {profiles.filter(p => p.role === 'sales_executive').length === 0 && (
+                    <div className="text-white/30 text-sm text-center py-4">No sales executives found.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Monthly Targets Console */}
+              <div className="glass-card p-5">
+                <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                  <h3 className="text-white font-semibold flex items-center gap-2 text-sm">
+                    <Target className="w-4 h-4 text-gold-500" /> Monthly Target Console
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <select value={targetMonth} onChange={e => setTargetMonth(Number(e.target.value))}
+                      className="input-dark text-sm py-1.5 pr-7 appearance-none">
+                      {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                        <option key={i} value={i + 1}>{m}</option>
+                      ))}
+                    </select>
+                    <input type="number" value={targetYear} onChange={e => setTargetYear(Number(e.target.value))}
+                      className="input-dark text-sm py-1.5 w-20" min="2024" max="2030" />
+                    <button onClick={loadTargets}
+                      className="px-3 py-1.5 rounded-xl bg-gold-500/10 border border-gold-500/20 text-gold-500 text-xs font-medium hover:bg-gold-500/20 transition-all">
+                      Load
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {profiles.filter(p => p.role === 'sales_executive').map(p => {
+                    const edit = targetEdits[p.id] ?? { target1: 0, target2: 0, target3: 0, reward_amount: 0, reward_label: '' };
+                    const isSaving = savingTarget[p.id];
+                    return (
+                      <div key={p.id} className="p-4 rounded-xl bg-surface-50/30 border border-white/5">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-8 h-8 rounded-full bg-gold-500/10 border border-gold-500/20 flex items-center justify-center text-gold-500 font-bold text-sm flex-shrink-0">
+                            {p.full_name[0]?.toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-white font-medium text-sm">{p.full_name}</div>
+                            <div className="text-white/30 text-xs">{p.monthly_pieces} pieces this month</div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+                          <div>
+                            <label className="block text-xs text-white/40 mb-1">Target 1 (Min)</label>
+                            <input type="number" min="0" value={edit.target1}
+                              onChange={e => setTargetEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], target1: Number(e.target.value) } }))}
+                              className="input-dark w-full text-sm py-1.5" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-white/40 mb-1">Target 2 (₹8 unlock)</label>
+                            <input type="number" min="0" value={edit.target2}
+                              onChange={e => setTargetEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], target2: Number(e.target.value) } }))}
+                              className="input-dark w-full text-sm py-1.5" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-white/40 mb-1">Target 3 (Reward)</label>
+                            <input type="number" min="0" value={edit.target3}
+                              onChange={e => setTargetEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], target3: Number(e.target.value) } }))}
+                              className="input-dark w-full text-sm py-1.5" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-white/40 mb-1">Reward Amount (₹)</label>
+                            <input type="number" min="0" value={edit.reward_amount}
+                              onChange={e => setTargetEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], reward_amount: Number(e.target.value) } }))}
+                              className="input-dark w-full text-sm py-1.5" />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs text-white/40 mb-1">Reward Label</label>
+                            <input type="text" value={edit.reward_label}
+                              onChange={e => setTargetEdits(prev => ({ ...prev, [p.id]: { ...prev[p.id], reward_label: e.target.value } }))}
+                              placeholder="e.g. Performance Bonus, Salary Upgrade..."
+                              className="input-dark w-full text-sm py-1.5" />
+                          </div>
+                        </div>
+                        {/* Progress indicators */}
+                        {edit.target1 > 0 && (
+                          <div className="mb-3 space-y-1.5">
+                            {[
+                              { label: 'T1', val: edit.target1, color: '#3b82f6' },
+                              { label: 'T2', val: edit.target2, color: '#10b981' },
+                              { label: 'T3', val: edit.target3, color: '#FFD700' },
+                            ].filter(t => t.val > 0).map(t => {
+                              const pct = Math.min(100, Math.round((p.monthly_pieces / t.val) * 100));
+                              return (
+                                <div key={t.label} className="flex items-center gap-2">
+                                  <div className="text-xs text-white/30 w-6">{t.label}</div>
+                                  <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: t.color }} />
+                                  </div>
+                                  <div className="text-xs text-white/30 w-10 text-right">{pct}%</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="flex justify-end">
+                          <button onClick={() => handleSaveTarget(p.id)} disabled={isSaving}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gold-500/15 text-gold-500 border border-gold-500/30 text-xs font-medium hover:bg-gold-500/25 transition-all disabled:opacity-50">
+                            {isSaving ? <div className="w-3.5 h-3.5 border-2 border-gold-500/30 border-t-gold-500 rounded-full animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                            Save Targets
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </motion.div>
