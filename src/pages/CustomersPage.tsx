@@ -1,8 +1,42 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, X, Phone, MapPin, User, MessageCircle, ChevronRight, Package, Clock, CreditCard as Edit3, Trash2, BookUser } from 'lucide-react';
-import { supabase, Customer, Lead } from '../lib/supabase';
+import { Plus, Search, X, Phone, MapPin, User, MessageCircle, ChevronRight, Package, Clock, CreditCard as Edit3, Trash2, BookUser, Download, UserCog } from 'lucide-react';
+import { supabase, Customer, Lead, Profile } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+
+type ExportRange = 'last_month' | '3mo' | '6mo' | 'all';
+
+function exportToCSV(customers: Customer[], range: ExportRange) {
+  const now = new Date();
+  const cutoff = new Date();
+  if (range === 'last_month') cutoff.setMonth(now.getMonth() - 1);
+  else if (range === '3mo') cutoff.setMonth(now.getMonth() - 3);
+  else if (range === '6mo') cutoff.setMonth(now.getMonth() - 6);
+  else cutoff.setFullYear(2000);
+
+  const rows = customers.filter(c => new Date(c.created_at) >= cutoff);
+
+  const headers = ['Name', 'Phone', 'Email', 'City', 'Address', 'Notes', 'Added By', 'Date Added'];
+  const data = rows.map(c => [
+    c.full_name,
+    c.phone,
+    c.email || '',
+    c.city || '',
+    c.address || '',
+    c.notes || '',
+    (c as any).added_by_profile?.full_name || '',
+    new Date(c.created_at).toLocaleDateString('en-IN'),
+  ]);
+
+  const csv = [headers, ...data].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `customers_${range}_${now.toISOString().slice(0, 10)}.csv`;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
 
 const EMPTY_FORM = {
   full_name: '',
@@ -27,6 +61,16 @@ export default function CustomersPage() {
   const [detailCustomer, setDetailCustomer] = useState<CustomerWithPurchases | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // Export state
+  const [showExport, setShowExport] = useState(false);
+  const [exportRange, setExportRange] = useState<ExportRange>('all');
+
+  // Reassignment state
+  const [reassignCustomer, setReassignCustomer] = useState<Customer | null>(null);
+  const [staffList, setStaffList] = useState<Profile[]>([]);
+  const [reassignTo, setReassignTo] = useState('');
+  const [reassigning, setReassigning] = useState(false);
+
   const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
 
   const fetchCustomers = useCallback(async () => {
@@ -40,6 +84,24 @@ export default function CustomersPage() {
   }, []);
 
   useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+
+  async function openReassign(customer: Customer) {
+    setReassignCustomer(customer);
+    setReassignTo('');
+    if (staffList.length === 0) {
+      const { data } = await supabase.from('profiles').select('*').in('role', ['sales_executive', 'manager']).eq('is_active', true).order('full_name');
+      if (data) setStaffList(data as Profile[]);
+    }
+  }
+
+  async function handleReassign() {
+    if (!reassignCustomer || !reassignTo) return;
+    setReassigning(true);
+    await supabase.from('customers').update({ added_by: reassignTo, updated_at: new Date().toISOString() }).eq('id', reassignCustomer.id);
+    await fetchCustomers();
+    setReassignCustomer(null);
+    setReassigning(false);
+  }
 
   async function openDetail(customer: CustomerWithPurchases) {
     setDetailCustomer(customer);
@@ -100,6 +162,13 @@ export default function CustomersPage() {
     c.city.toLowerCase().includes(search.toLowerCase())
   );
 
+  const RANGE_LABELS: Record<ExportRange, string> = {
+    last_month: 'Last Month',
+    '3mo': 'Last 3 Months',
+    '6mo': 'Last 6 Months',
+    all: 'All Time',
+  };
+
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-4xl mx-auto">
       {/* Header */}
@@ -111,10 +180,46 @@ export default function CustomersPage() {
           </h1>
           <p className="text-white/40 text-sm mt-0.5">{customers.length} registered customers</p>
         </div>
-        <button onClick={openCreate} className="btn-gold flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Customer
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button onClick={() => setShowExport(v => !v)}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all text-sm font-medium">
+              <Download className="w-4 h-4" /> Export
+            </button>
+          )}
+          <button onClick={openCreate} className="btn-gold flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Customer
+          </button>
+        </div>
       </div>
+
+      {/* Export Panel */}
+      <AnimatePresence>
+        {showExport && isAdmin && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden">
+            <div className="glass-card p-4 border border-blue-500/20">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-white/60 text-sm font-medium">Export range:</span>
+                {(['last_month', '3mo', '6mo', 'all'] as ExportRange[]).map(r => (
+                  <button key={r} onClick={() => setExportRange(r)}
+                    className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                      exportRange === r
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+                    }`}>
+                    {RANGE_LABELS[r]}
+                  </button>
+                ))}
+                <button onClick={() => exportToCSV(customers, exportRange)}
+                  className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/15 border border-blue-500/25 text-blue-300 hover:bg-blue-500/25 text-sm font-medium transition-all">
+                  <Download className="w-4 h-4" /> Download CSV
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search */}
       <div className="relative">
@@ -151,6 +256,9 @@ export default function CustomersPage() {
                       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                         {isAdmin && (
                           <>
+                            <button onClick={() => openReassign(c)} className="p-1.5 rounded-lg text-white/30 hover:text-blue-400 hover:bg-blue-500/10 transition-all" title="Reassign customer">
+                              <UserCog className="w-3.5 h-3.5" />
+                            </button>
                             <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg text-white/30 hover:text-gold-500 hover:bg-gold-500/10 transition-all">
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
@@ -385,6 +493,43 @@ export default function CustomersPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Reassign Modal */}
+      <AnimatePresence>
+        {reassignCustomer && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+            onClick={e => e.target === e.currentTarget && setReassignCustomer(null)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card gold-border w-full max-w-sm p-6">
+              <div className="flex items-center gap-3 mb-5">
+                <UserCog className="w-5 h-5 text-blue-400" />
+                <h3 className="text-white font-semibold">Reassign Customer</h3>
+              </div>
+              <p className="text-white/50 text-sm mb-4">
+                Reassign <span className="text-white font-medium">{reassignCustomer.full_name}</span> to a different staff member.
+              </p>
+              <select value={reassignTo} onChange={e => setReassignTo(e.target.value)} className="input-dark w-full mb-4">
+                <option value="">Select staff member...</option>
+                {staffList.map(s => (
+                  <option key={s.id} value={s.id}>{s.full_name} ({s.role.replace('_', ' ')})</option>
+                ))}
+              </select>
+              <div className="flex gap-3">
+                <button onClick={() => setReassignCustomer(null)}
+                  className="flex-1 py-2 rounded-xl text-white/40 hover:text-white/70 hover:bg-white/5 text-sm transition-all">
+                  Cancel
+                </button>
+                <button onClick={handleReassign} disabled={!reassignTo || reassigning}
+                  className="flex-1 py-2 rounded-xl bg-blue-500/15 border border-blue-500/20 text-blue-300 hover:bg-blue-500/25 text-sm font-medium transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+                  {reassigning && <div className="w-3.5 h-3.5 border-2 border-blue-300/30 border-t-blue-300 rounded-full animate-spin" />}
+                  Reassign
+                </button>
               </div>
             </motion.div>
           </motion.div>

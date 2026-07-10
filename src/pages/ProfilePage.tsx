@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, History, Award, Users, Star, Flame, Trophy, CreditCard as Edit2, Check, X, TrendingUp, Target, Calendar, Shield, ChevronRight, Zap, Lock } from 'lucide-react';
-import { supabase, Profile, CycleSnapshot, PerformanceCycle } from '../lib/supabase';
+import { User, History, Award, Users, Star, Flame, Trophy, CreditCard as Edit2, Check, X, TrendingUp, Target, Calendar, Shield, ChevronRight, Zap, Lock, DollarSign } from 'lucide-react';
+import { supabase, Profile, CycleSnapshot, PerformanceCycle, MonthlyTarget, getCommissionRate } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLevels } from '../contexts/LevelsContext';
 
@@ -75,6 +75,7 @@ export default function ProfilePage({ viewUserId }: Props) {
   const [editingAbout, setEditingAbout] = useState(false);
   const [aboutDraft, setAboutDraft] = useState('');
   const [savingAbout, setSavingAbout] = useState(false);
+  const [monthlyTarget, setMonthlyTarget] = useState<MonthlyTarget | null>(null);
 
   const targetUserId = viewUserId || me?.id;
   const isOwnProfile = targetUserId === me?.id;
@@ -84,7 +85,8 @@ export default function ProfilePage({ viewUserId }: Props) {
     const { data } = await supabase.from('profiles').select('*').eq('id', targetUserId).maybeSingle();
     if (data) setProfile(data as Profile);
 
-    const [{ data: snaps }, { data: leaves }] = await Promise.all([
+    const now = new Date();
+    const [{ data: snaps }, { data: leaves }, { data: target }] = await Promise.all([
       supabase.from('cycle_snapshots')
         .select('*, cycle:performance_cycles(*)')
         .eq('user_id', targetUserId)
@@ -94,9 +96,16 @@ export default function ProfilePage({ viewUserId }: Props) {
         .eq('user_id', targetUserId)
         .order('date', { ascending: false })
         .limit(40),
+      supabase.from('monthly_targets')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .eq('month', now.getMonth() + 1)
+        .eq('year', now.getFullYear())
+        .maybeSingle(),
     ]);
     if (snaps) setSnapshots(snaps as any);
     if (leaves) setLeaveHistory(leaves);
+    if (target) setMonthlyTarget(target as MonthlyTarget);
   }, [targetUserId]);
 
   useEffect(() => {
@@ -231,6 +240,92 @@ export default function ProfilePage({ viewUserId }: Props) {
                   </p>
                 )}
               </div>
+
+              {/* Commission Forecast — sales execs only */}
+              {profile.role === 'sales_executive' && (() => {
+                const rate = getCommissionRate(profile.lifetime_pieces, profile.monthly_pieces, monthlyTarget?.target2 ?? 0);
+                const earned = profile.monthly_pieces * rate;
+                const lifetimeEarned = profile.lifetime_pieces * rate;
+                const t2 = monthlyTarget?.target2 ?? 0;
+                const t2Progress = t2 > 0 ? Math.min(100, (profile.monthly_pieces / t2) * 100) : 0;
+                const piecesTo5k = Math.max(0, 5000 - profile.lifetime_pieces);
+                const piecesToT2 = t2 > 0 ? Math.max(0, t2 - profile.monthly_pieces) : 0;
+                const isElite = profile.lifetime_pieces >= 5000;
+                const isT2Hit = t2 > 0 && profile.monthly_pieces >= t2;
+
+                const rateColors: Record<number, { bg: string; text: string; border: string }> = {
+                  4: { bg: 'bg-white/5', text: 'text-white/60', border: 'border-white/10' },
+                  6: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
+                  8: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+                };
+                const rc = rateColors[rate] || rateColors[4];
+
+                return (
+                  <div className={`glass-card p-5 border ${rc.border}`}>
+                    <h3 className="text-white font-semibold flex items-center gap-2 mb-4">
+                      <DollarSign className="w-4 h-4 text-emerald-400" /> Commission Forecast
+                    </h3>
+
+                    {/* Current tier badge */}
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl ${rc.bg} border ${rc.border} mb-4`}>
+                      <span className={`text-sm font-bold ${rc.text}`}>₹{rate}/piece</span>
+                      <span className="text-white/30 text-xs">
+                        {rate === 8 ? '— Target 2 achieved!' : rate === 6 ? '— Elite tier (5000+ lifetime)' : '— Base tier'}
+                      </span>
+                    </div>
+
+                    {/* Monthly earnings progress */}
+                    <div className="space-y-3 mb-4">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-white/50">This Month</span>
+                        <span className="text-emerald-400 font-bold">₹{earned.toLocaleString('en-IN')}</span>
+                      </div>
+                      {t2 > 0 && (
+                        <>
+                          <div className="h-2.5 bg-surface-50 rounded-full overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${t2Progress}%` }}
+                              transition={{ duration: 0.8 }}
+                              className={`h-full rounded-full ${isT2Hit ? 'bg-emerald-400' : 'bg-blue-400'}`}
+                              style={{ boxShadow: isT2Hit ? '0 0 8px rgba(52,211,153,0.5)' : undefined }} />
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-white/30">
+                            <span>{profile.monthly_pieces} / {t2} pieces for Target 2</span>
+                            <span>{Math.round(t2Progress)}%</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Tier gap indicators */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {!isElite && (
+                        <div className="p-3 rounded-xl bg-surface-50/40">
+                          <div className="text-white/30 text-xs mb-0.5">To Elite (₹6/pc)</div>
+                          <div className="text-blue-400 font-bold text-sm">{piecesTo5k.toLocaleString()} pieces</div>
+                          <div className="text-white/20 text-xs">5000 lifetime required</div>
+                        </div>
+                      )}
+                      {isElite && !isT2Hit && t2 > 0 && (
+                        <div className="p-3 rounded-xl bg-surface-50/40">
+                          <div className="text-white/30 text-xs mb-0.5">To ₹8/pc (Target 2)</div>
+                          <div className="text-emerald-400 font-bold text-sm">{piecesToT2} more pieces</div>
+                          <div className="text-white/20 text-xs">+₹{(piecesToT2 * 2).toLocaleString()} potential gain</div>
+                        </div>
+                      )}
+                      {isT2Hit && (
+                        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 col-span-2">
+                          <div className="text-emerald-400 text-sm font-medium">Maximum rate achieved — ₹8/piece active!</div>
+                        </div>
+                      )}
+                      <div className="p-3 rounded-xl bg-surface-50/40">
+                        <div className="text-white/30 text-xs mb-0.5">Lifetime Earnings</div>
+                        <div className="text-gold-500 font-bold text-sm">₹{lifetimeEarned.toLocaleString('en-IN')}</div>
+                        <div className="text-white/20 text-xs">{profile.lifetime_pieces} pieces total</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Career level progress */}
               <div className="glass-card p-5" style={{ border: `1px solid ${levelInfo.current.color}20` }}>

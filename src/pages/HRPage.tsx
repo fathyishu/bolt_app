@@ -4,6 +4,7 @@ import {
   UserCheck, Clock, Calendar, Cake, ChevronDown, ChevronUp,
   CheckCircle, XCircle, Plus, AlertCircle, Zap, RefreshCw,
   Package, Users, Shield, Coffee, Archive, AlertTriangle, History,
+  Minus, FileText,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -769,43 +770,127 @@ function BreakTab() {
 }
 
 // ── Late Cake Tab ───────────────────────────────────────────────────────────
+interface CakeLog {
+  id: string;
+  user_id: string;
+  cycle_id: string;
+  slices: number;
+  reason: string;
+  logged_date: string;
+  logged_at: string;
+  logged_by: string | null;
+  profile?: Profile;
+  logger?: Profile;
+}
+
 function CakeTab() {
   const { profile: me } = useAuth();
   const [slices, setSlices] = useState<(LateCakeSlice & { profile: Profile })[]>([]);
+  const [logs, setLogs] = useState<CakeLog[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [addInput, setAddInput] = useState<Record<string, number>>({});
-  const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [purchasing, setPurchasing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Log entry form
+  const today = new Date().toISOString().slice(0, 10);
+  const [logForm, setLogForm] = useState({ user_id: '', slices: 1, reason: '', logged_date: today });
+  const [logError, setLogError] = useState('');
+
+  // Inline adjustment per person
+  const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
 
   const cycleId = new Date().toISOString().slice(0, 7);
 
   const load = useCallback(async () => {
-    const [{ data: s }, { data: p }] = await Promise.all([
+    const [{ data: s }, { data: p }, { data: l }] = await Promise.all([
       supabase.from('late_cake_slices').select('*, profile:profiles(*)').eq('cycle_id', cycleId),
-      supabase.from('profiles').select('*').neq('role', 'admin').order('full_name'),
+      supabase.from('profiles').select('*').neq('role', 'admin').eq('is_active', true).order('full_name'),
+      supabase.from('late_cake_logs')
+        .select('*, profile:profiles!late_cake_logs_user_id_fkey(*), logger:profiles!late_cake_logs_logged_by_fkey(full_name)')
+        .eq('cycle_id', cycleId)
+        .order('logged_at', { ascending: false })
+        .limit(50),
     ]);
     if (s) setSlices(s as any);
-    if (p) {
-      setProfiles(p as Profile[]);
-      const inputs: Record<string, number> = {};
-      (p as Profile[]).forEach(pr => { inputs[pr.id] = 0; });
-      setAddInput(inputs);
-    }
+    if (p) setProfiles(p as Profile[]);
+    if (l) setLogs(l as any);
   }, [cycleId]);
 
   useEffect(() => { load(); }, [load]);
 
-  async function addSlices(userId: string) {
-    if (!me || !addInput[userId]) return;
-    setSaving(prev => ({ ...prev, [userId]: true }));
-    const existing = slices.find(s => s.user_id === userId);
+  async function handleAddLog(e: React.FormEvent) {
+    e.preventDefault();
+    if (!me) return;
+    if (!logForm.user_id) { setLogError('Select a person'); return; }
+    if (!logForm.reason.trim()) { setLogError('Reason is required'); return; }
+    if (logForm.slices < 1) { setLogError('Must add at least 1 slice'); return; }
+    setLogError('');
+    setSaving(true);
+
+    const now = new Date().toISOString();
+    await supabase.from('late_cake_logs').insert({
+      user_id: logForm.user_id,
+      cycle_id: cycleId,
+      slices: logForm.slices,
+      reason: logForm.reason.trim(),
+      logged_date: logForm.logged_date,
+      logged_at: now,
+      logged_by: me.id,
+    });
+
+    // Update running total in late_cake_slices
+    const existing = slices.find(s => s.user_id === logForm.user_id);
     if (existing) {
-      await supabase.from('late_cake_slices').update({ slices: existing.slices + addInput[userId], updated_at: new Date().toISOString() }).eq('id', existing.id);
+      await supabase.from('late_cake_slices').update({
+        slices: existing.slices + logForm.slices,
+        updated_at: now,
+      }).eq('id', existing.id);
     } else {
-      await supabase.from('late_cake_slices').insert({ user_id: userId, slices: addInput[userId], cycle_id: cycleId });
+      await supabase.from('late_cake_slices').insert({
+        user_id: logForm.user_id,
+        slices: logForm.slices,
+        cycle_id: cycleId,
+      });
     }
-    setSaving(prev => ({ ...prev, [userId]: false }));
-    setAddInput(prev => ({ ...prev, [userId]: 0 }));
+
+    setLogForm({ user_id: '', slices: 1, reason: '', logged_date: today });
+    setSaving(false);
+    load();
+  }
+
+  async function adjustSlice(userId: string, delta: number) {
+    if (!me) return;
+    const existing = slices.find(s => s.user_id === userId);
+    const newCount = Math.max(0, (existing?.slices || 0) + delta);
+    setAdjusting(prev => ({ ...prev, [userId]: true }));
+
+    if (delta !== 0) {
+      const reason = delta > 0 ? `Manual +${delta} adjustment` : `Manual ${delta} adjustment`;
+      await supabase.from('late_cake_logs').insert({
+        user_id: userId,
+        cycle_id: cycleId,
+        slices: delta,
+        reason,
+        logged_date: today,
+        logged_at: new Date().toISOString(),
+        logged_by: me.id,
+      });
+    }
+
+    if (existing) {
+      await supabase.from('late_cake_slices').update({
+        slices: newCount,
+        updated_at: new Date().toISOString(),
+      }).eq('id', existing.id);
+    } else if (delta > 0) {
+      await supabase.from('late_cake_slices').insert({
+        user_id: userId,
+        slices: newCount,
+        cycle_id: cycleId,
+      });
+    }
+
+    setAdjusting(prev => ({ ...prev, [userId]: false }));
     load();
   }
 
@@ -836,7 +921,8 @@ function CakeTab() {
   })).sort((a, b) => (b.sliceData?.slices || 0) - (a.sliceData?.slices || 0));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Header + totals */}
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
@@ -844,9 +930,7 @@ function CakeTab() {
               <Cake className="w-5 h-5 text-gold-500" />
               <span className="text-white font-semibold">Late Cake — {cycleId}</span>
             </div>
-            <div className="text-white/40 text-sm mt-0.5">
-              {total} total slices · 10 slices = 1 cake
-            </div>
+            <div className="text-white/40 text-sm mt-0.5">{total} total slices · 10 slices = 1 cake</div>
           </div>
           <button onClick={handlePurchase} disabled={purchasing || total === 0}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gold-500/15 text-gold-500 hover:bg-gold-500/25 transition-all font-medium text-sm border border-gold-500/20 disabled:opacity-30">
@@ -855,59 +939,153 @@ function CakeTab() {
           </button>
         </div>
 
-        {/* Visual cake progress */}
         {total > 0 && (
-          <div className="mb-4">
-            <div className="h-3 bg-surface-50 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.min(100, (total / 10) * 100)}%` }}
-                className="h-full rounded-full bg-gold-500"
-                style={{ boxShadow: '0 0 10px rgba(255,215,0,0.5)' }}
-              />
+          <div className="mb-5">
+            <div className="h-2.5 bg-surface-50 rounded-full overflow-hidden">
+              <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, (total / 10) * 100)}%` }}
+                className="h-full rounded-full bg-gold-500" style={{ boxShadow: '0 0 10px rgba(255,215,0,0.4)' }} />
             </div>
-            <div className="text-white/40 text-xs mt-1">{total}/10 slices toward next cake</div>
+            <div className="text-white/30 text-xs mt-1">{total}/10 slices toward next cake</div>
           </div>
         )}
 
-        <div className="space-y-3">
+        {/* Per-person slice totals with +/- adjustments */}
+        <div className="space-y-2.5">
           {allProfiles.map(({ profile: p, sliceData }) => {
             const currentSlices = sliceData?.slices || 0;
             const sharePct = total > 0 ? Math.round((currentSlices / total) * 100 * 10) / 10 : 0;
+            const isAdj = adjusting[p.id];
             return (
-              <div key={p.id} className="flex items-center gap-3 flex-wrap">
-                <div className="w-8 h-8 rounded-full bg-surface-50 flex items-center justify-center font-bold text-sm text-white/60 flex-shrink-0">
+              <div key={p.id} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-surface-50 flex items-center justify-center font-bold text-xs text-white/60 flex-shrink-0">
                   {p.full_name?.[0]?.toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-white/70 text-sm font-medium">{p.full_name}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-white/80 text-sm font-medium">{p.full_name}</span>
                     {currentSlices > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-gold-500/15 text-gold-500 font-medium">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-gold-500/10 text-gold-500 font-medium border border-gold-500/20">
                         {currentSlices} {currentSlices === 1 ? 'slice' : 'slices'} · {sharePct}%
                       </span>
                     )}
                   </div>
                   {currentSlices > 0 && total > 0 && (
-                    <div className="mt-1 h-1.5 bg-surface-50 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-gold-500/60" style={{ width: `${sharePct}%` }} />
+                    <div className="mt-1 h-1 bg-surface-50 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-gold-500/50" style={{ width: `${sharePct}%` }} />
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <input type="number" min="0" value={addInput[p.id] || ''}
-                    onChange={e => setAddInput(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
-                    className="input-dark w-20 text-sm py-1.5 text-center" placeholder="0" />
-                  <button onClick={() => addSlices(p.id)} disabled={saving[p.id] || !addInput[p.id]}
-                    className="px-3 py-1.5 rounded-lg bg-gold-500/15 text-gold-500 hover:bg-gold-500/25 text-sm font-medium transition-all disabled:opacity-30">
-                    {saving[p.id] ? '...' : '+ Add'}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => adjustSlice(p.id, -1)} disabled={isAdj || currentSlices === 0}
+                    className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center transition-all disabled:opacity-30">
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="w-8 text-center text-white font-bold text-sm">{currentSlices}</span>
+                  <button onClick={() => adjustSlice(p.id, 1)} disabled={isAdj}
+                    className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 flex items-center justify-center transition-all disabled:opacity-30">
+                    <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
             );
           })}
+          {allProfiles.length === 0 && (
+            <div className="text-white/30 text-sm text-center py-4">No active staff found.</div>
+          )}
         </div>
       </div>
+
+      {/* Log Entry Form */}
+      <div className="glass-card p-5">
+        <h3 className="text-white font-semibold flex items-center gap-2 mb-4">
+          <FileText className="w-4 h-4 text-amber-400" />
+          Log a Late Cake Entry
+        </h3>
+        <form onSubmit={handleAddLog} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-white/40 mb-1 uppercase tracking-wider">Person *</label>
+              <select value={logForm.user_id} onChange={e => { setLogForm(f => ({ ...f, user_id: e.target.value })); setLogError(''); }}
+                className="input-dark w-full">
+                <option value="">Select staff...</option>
+                {profiles.map(p => (
+                  <option key={p.id} value={p.id}>{p.full_name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3 col-span-2 sm:col-span-1">
+              <div>
+                <label className="block text-xs text-white/40 mb-1 uppercase tracking-wider">Slices *</label>
+                <input type="number" min="1" max="50" value={logForm.slices}
+                  onChange={e => setLogForm(f => ({ ...f, slices: Math.max(1, Number(e.target.value)) }))}
+                  className="input-dark w-full text-center" />
+              </div>
+              <div>
+                <label className="block text-xs text-white/40 mb-1 uppercase tracking-wider">Date *</label>
+                <input type="date" value={logForm.logged_date}
+                  onChange={e => setLogForm(f => ({ ...f, logged_date: e.target.value }))}
+                  className="input-dark w-full" />
+              </div>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-white/40 mb-1 uppercase tracking-wider">Reason / Details *</label>
+              <input type="text" value={logForm.reason}
+                onChange={e => { setLogForm(f => ({ ...f, reason: e.target.value })); setLogError(''); }}
+                placeholder="e.g. Late by 25 mins on 10 July..."
+                className="input-dark w-full" />
+            </div>
+          </div>
+          {logError && <p className="text-red-400 text-xs">{logError}</p>}
+          <button type="submit" disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 font-medium text-sm border border-amber-500/20 transition-all disabled:opacity-40">
+            {saving ? <div className="w-4 h-4 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" /> : <Plus className="w-4 h-4" />}
+            Add Entry
+          </button>
+        </form>
+      </div>
+
+      {/* Audit Timeline */}
+      {logs.length > 0 && (
+        <div className="glass-card p-5">
+          <h3 className="text-white font-semibold flex items-center gap-2 mb-4">
+            <History className="w-4 h-4 text-blue-400" />
+            Entry Log — {cycleId}
+          </h3>
+          <div className="space-y-2.5 max-h-72 overflow-y-auto">
+            {logs.map(log => {
+              const p = log.profile;
+              const isNeg = log.slices < 0;
+              return (
+                <div key={log.id} className="flex items-start gap-3 p-3 rounded-xl bg-surface-50/30">
+                  <div className="w-7 h-7 rounded-full bg-surface-50 flex items-center justify-center font-bold text-xs text-white/50 flex-shrink-0 mt-0.5">
+                    {p?.full_name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-white/80 text-sm font-medium">{p?.full_name || 'Unknown'}</span>
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${isNeg ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                        {isNeg ? '' : '+'}{log.slices} {Math.abs(log.slices) === 1 ? 'slice' : 'slices'}
+                      </span>
+                    </div>
+                    <div className="text-white/50 text-xs mt-0.5 leading-relaxed">{log.reason}</div>
+                    <div className="text-white/25 text-xs mt-0.5 flex items-center gap-2">
+                      <span>{log.logged_date}</span>
+                      <span>·</span>
+                      <span>{new Date(log.logged_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                      {(log as any).logger?.full_name && (
+                        <>
+                          <span>·</span>
+                          <span>by {(log as any).logger.full_name}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
