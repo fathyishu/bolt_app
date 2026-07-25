@@ -4,7 +4,7 @@ import {
   UserCheck, Clock, Calendar, Cake, ChevronDown, ChevronUp,
   CheckCircle, XCircle, Plus, AlertCircle, Zap, RefreshCw,
   Package, Users, Shield, Coffee, Archive, AlertTriangle, History,
-  Minus, FileText,
+  Minus, FileText, RotateCcw, Trash2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import {
@@ -790,6 +790,7 @@ function CakeTab() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [purchasing, setPurchasing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false); // Ch4: reset log/count loading
 
   // Log entry form
   const today = new Date().toISOString().slice(0, 10);
@@ -913,6 +914,26 @@ function CakeTab() {
     load();
   }
 
+  // Ch4: Reset Log — clears the audit ledger for the current cycle only.
+  async function handleResetLog() {
+    if (!me || !confirm('Clear ALL late cake log entries for this cycle? This cannot be undone.')) return;
+    setResetting(true);
+    await supabase.from('late_cake_logs').delete().eq('cycle_id', cycleId);
+    setResetting(false);
+    load();
+  }
+
+  // Ch4: Reset Cake Count — sets every staff member's slice count to zero.
+  async function handleResetCakeCount() {
+    if (!me || !confirm('Reset ALL slice counts to zero for this cycle? Logs are kept.')) return;
+    setResetting(true);
+    for (const s of slices) {
+      await supabase.from('late_cake_slices').update({ slices: 0, updated_at: new Date().toISOString() }).eq('id', s.id);
+    }
+    setResetting(false);
+    load();
+  }
+
   const total = slices.reduce((s, r) => s + r.slices, 0);
 
   const allProfiles = profiles.map(p => ({
@@ -936,6 +957,19 @@ function CakeTab() {
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gold-500/15 text-gold-500 hover:bg-gold-500/25 transition-all font-medium text-sm border border-gold-500/20 disabled:opacity-30">
             {purchasing ? <div className="w-4 h-4 border-2 border-gold-500/30 border-t-gold-500 rounded-full animate-spin" /> : <Cake className="w-4 h-4" />}
             Purchase Cake & Reset
+          </button>
+        </div>
+        {/* Ch4: Reset Log + Reset Cake Count controls for admin/hr/manager */}
+        <div className="flex items-center gap-2 flex-wrap -mt-2 mb-2">
+          <button onClick={handleResetLog} disabled={resetting || logs.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-medium border border-red-500/20 transition-all disabled:opacity-30">
+            {resetting ? <div className="w-3.5 h-3.5 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            Reset Log
+          </button>
+          <button onClick={handleResetCakeCount} disabled={resetting || total === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 text-xs font-medium border border-orange-500/20 transition-all disabled:opacity-30">
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset Cake Count
           </button>
         </div>
 

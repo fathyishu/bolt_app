@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, FileText, BarChart3, CheckSquare, Settings, LogOut, Trophy, Menu, X, Tv, ChevronRight, Flame, ShieldCheck, Shield, CircleUser as UserCircle, TrendingUp, BookUser } from 'lucide-react';
+import { LayoutDashboard, FileText, BarChart3, CheckSquare, Settings, LogOut, Trophy, Menu, X, Tv, ChevronRight, Flame, Shield, CircleUser as UserCircle, TrendingUp, BookUser, GraduationCap, Lock, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLevels } from '../contexts/LevelsContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useOnboarding } from '../hooks/useOnboarding';
 import { supabase } from '../lib/supabase';
 
 interface NavItem {
@@ -12,17 +14,22 @@ interface NavItem {
   label: string;
   roles?: string[];
   badge?: number;
+  locked?: boolean;
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { profile, signOut } = useAuth();
   const { getLevel } = useLevels();
+  const { theme, toggleTheme } = useTheme();
+  const onboarding = useOnboarding(profile);
+  const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingEod, setPendingEod] = useState(0);
 
   const levelInfo = getLevel(profile?.lifetime_pieces ?? 0);
   const isPrivileged = ['admin', 'hr', 'manager'].includes(profile?.role ?? '');
+  const tabsLocked = !onboarding.isUnlocked;
 
   useEffect(() => {
     if (!isPrivileged) return;
@@ -48,12 +55,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   const navItems: NavItem[] = [
-    { to: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" />, label: 'Dashboard' },
-    { to: '/sales', icon: <TrendingUp className="w-5 h-5" />, label: 'Sales' },
-    { to: '/customers', icon: <BookUser className="w-5 h-5" />, label: 'Customers' },
-    { to: '/eod', icon: <FileText className="w-5 h-5" />, label: 'EOD Report' },
-    { to: '/leaderboard', icon: <BarChart3 className="w-5 h-5" />, label: 'Leaderboard' },
-    { to: '/tasks', icon: <CheckSquare className="w-5 h-5" />, label: 'Tasks' },
+    { to: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" />, label: 'Dashboard', locked: tabsLocked },
+    { to: '/sales', icon: <TrendingUp className="w-5 h-5" />, label: 'Sales', locked: tabsLocked },
+    { to: '/customers', icon: <BookUser className="w-5 h-5" />, label: 'Customers', locked: tabsLocked },
+    { to: '/eod', icon: <FileText className="w-5 h-5" />, label: 'EOD Report', locked: tabsLocked },
+    { to: '/leaderboard', icon: <BarChart3 className="w-5 h-5" />, label: 'Leaderboard', locked: tabsLocked },
+    { to: '/tasks', icon: <CheckSquare className="w-5 h-5" />, label: 'Tasks', locked: tabsLocked },
+    { to: '/training', icon: <GraduationCap className="w-5 h-5" />, label: 'Training' },
     { to: '/profile', icon: <UserCircle className="w-5 h-5" />, label: 'Profile' },
     {
       to: '/hr',
@@ -122,7 +130,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {filteredNav.map(item => (
+        {filteredNav.map(item => {
+          if (item.locked) {
+            return (
+              <div
+                key={item.to}
+                title="Complete onboarding in the Training tab to unlock"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/25 cursor-not-allowed select-none relative"
+              >
+                <span className="text-white/20">{item.icon}</span>
+                <span className="flex-1 line-through decoration-white/15">{item.label}</span>
+                <Lock className="w-3.5 h-3.5 text-white/20" />
+              </div>
+            );
+          }
+          return (
           <NavLink
             key={item.to}
             to={item.to}
@@ -150,7 +172,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </>
             )}
           </NavLink>
-        ))}
+          );
+        })}
 
         <NavLink
           to="/tv"
@@ -175,8 +198,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </NavLink>
       </nav>
 
-      {/* Sign out */}
-      <div className="px-3 py-4 border-t border-white/5">
+      {/* Theme toggle + Sign out */}
+      <div className="px-3 py-4 border-t border-white/5 space-y-1">
+        <button
+          onClick={toggleTheme}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-gold-500 hover:bg-gold-500/10 w-full transition-all duration-150"
+        >
+          {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+        </button>
         <button
           onClick={handleSignOut}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/40 hover:text-red-400 hover:bg-red-500/10 w-full transition-all duration-150"

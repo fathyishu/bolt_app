@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, X, Phone, MapPin, User, MessageCircle, ChevronRight, Package, Clock, CreditCard as Edit3, Trash2, BookUser, Download, UserCog } from 'lucide-react';
+import { Plus, Search, X, Phone, MapPin, User, MessageCircle, ChevronRight, Package, Clock, CreditCard as Edit3, Trash2, BookUser, Download, UserCog, Sheet } from 'lucide-react';
 import { supabase, Customer, Lead, Profile } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 type ExportRange = 'last_month' | '3mo' | '6mo' | 'all';
+type CustomerWithPurchases = Customer & { purchases?: Lead[] };
 
 function exportToCSV(customers: Customer[], range: ExportRange) {
   const now = new Date();
@@ -38,6 +39,27 @@ function exportToCSV(customers: Customer[], range: ExportRange) {
   window.URL.revokeObjectURL(url);
 }
 
+// Ch3: Google Sheets export hook — copies tab-delimited rows to the clipboard and
+// opens a fresh Google Sheet. Leaves the working CSV export untouched.
+function exportToGoogleSheets(customers: CustomerWithPurchases[], range: ExportRange) {
+  const now = new Date();
+  const cutoff = new Date();
+  if (range === 'last_month') cutoff.setMonth(now.getMonth() - 1);
+  else if (range === '3mo') cutoff.setMonth(now.getMonth() - 3);
+  else if (range === '6mo') cutoff.setMonth(now.getMonth() - 6);
+  else cutoff.setFullYear(2000);
+
+  const rows = customers.filter(c => new Date(c.created_at) >= cutoff);
+  const headers = ['Name', 'Phone', 'Email', 'City', 'Address', 'Notes', 'Added By', 'Date Added'];
+  const data = rows.map(c => [
+    c.full_name, c.phone, c.email || '', c.city || '', c.address || '', c.notes || '',
+    (c as any).added_by_profile?.full_name || '',
+    new Date(c.created_at).toLocaleDateString('en-IN'),
+  ]);
+  const tsv = [headers, ...data].map(row => row.map(v => String(v).replace(/\t/g, ' ').replace(/\n/g, ' ')).join('\t')).join('\n');
+  navigator.clipboard.writeText(tsv).then(() => { window.open('https://sheets.new', '_blank'); });
+}
+
 const EMPTY_FORM = {
   full_name: '',
   phone: '',
@@ -46,8 +68,6 @@ const EMPTY_FORM = {
   city: '',
   notes: '',
 };
-
-type CustomerWithPurchases = Customer & { purchases?: Lead[] };
 
 export default function CustomersPage() {
   const { profile } = useAuth();
@@ -97,7 +117,7 @@ export default function CustomersPage() {
   async function handleReassign() {
     if (!reassignCustomer || !reassignTo) return;
     setReassigning(true);
-    await supabase.from('customers').update({ added_by: reassignTo, updated_at: new Date().toISOString() }).eq('id', reassignCustomer.id);
+    await supabase.from('customers').update({ added_by: reassignTo, owner_id: reassignTo, updated_at: new Date().toISOString() }).eq('id', reassignCustomer.id);
     await fetchCustomers();
     setReassignCustomer(null);
     setReassigning(false);
@@ -141,7 +161,8 @@ export default function CustomersPage() {
     if (editCustomer) {
       await supabase.from('customers').update({ ...form, updated_at: new Date().toISOString() }).eq('id', editCustomer.id);
     } else {
-      await supabase.from('customers').insert({ ...form, added_by: profile.id });
+      // Ch3: session stamping — lock the logged-in staff member onto the new entry
+      await supabase.from('customers').insert({ ...form, added_by: profile.id, owner_id: profile.id });
     }
     await fetchCustomers();
     setShowModal(false);
@@ -214,6 +235,11 @@ export default function CustomersPage() {
                 <button onClick={() => exportToCSV(customers, exportRange)}
                   className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/15 border border-blue-500/25 text-blue-300 hover:bg-blue-500/25 text-sm font-medium transition-all">
                   <Download className="w-4 h-4" /> Download CSV
+                </button>
+                {/* Ch3: complementary Google Sheets export — leaves CSV export untouched */}
+                <button onClick={() => exportToGoogleSheets(customers, exportRange)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/25 text-sm font-medium transition-all">
+                  <Sheet className="w-4 h-4" /> Export to Google Sheets
                 </button>
               </div>
             </div>

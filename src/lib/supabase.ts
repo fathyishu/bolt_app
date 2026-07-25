@@ -40,6 +40,7 @@ export interface Profile {
   about: string;
   is_active: boolean;
   deleted_at: string | null;
+  is_onboarding_complete: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -53,9 +54,11 @@ export interface Customer {
   city: string;
   notes: string;
   added_by: string | null;
+  owner_id: string | null;
   created_at: string;
   updated_at: string;
   added_by_profile?: Profile;
+  owner_profile?: Profile;
 }
 
 export interface Lead {
@@ -285,4 +288,120 @@ export function getCommissionRate(lifetimePieces: number, monthlyPieces: number,
   if (target2 > 0 && monthlyPieces >= target2) return 8;
   if (lifetimePieces >= 5000) return 6;
   return 4;
+}
+
+// ── LMS types (additive) ────────────────────────────────────────────────────
+export type LmsContentKind = 'video' | 'asset' | 'text' | 'interactive';
+export type LmsAssetType = 'pdf' | 'mp3' | 'image' | null;
+
+export interface LmsCategory {
+  id: string;
+  name: string;
+  description: string;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface LmsCourse {
+  id: string;
+  category_id: string | null;
+  title: string;
+  description: string;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface LmsModule {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface LmsLesson {
+  id: string;
+  module_id: string;
+  title: string;
+  description: string;
+  content_kind: LmsContentKind;
+  video_url: string;
+  video_storage_path: string | null;
+  video_duration_sec: number;
+  unskippable: boolean;
+  asset_url: string | null;
+  asset_storage_path: string | null;
+  asset_type: LmsAssetType;
+  reflection_prompt: string;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface LmsCheckpoint {
+  id: string;
+  lesson_id: string;
+  timestamp_sec: number;
+  question: string;
+  options: string[];
+  correct_option_index: number;
+  sort_order: number;
+}
+
+export interface LmsCheckpointAnswer {
+  id: string;
+  checkpoint_id: string;
+  user_id: string;
+  selected_index: number;
+  is_correct: boolean;
+  answered_at: string;
+}
+
+export interface LmsFlashcard {
+  id: string;
+  lesson_id: string;
+  front_text: string;
+  back_text: string;
+  sort_order: number;
+}
+
+export interface LmsLessonProgress {
+  id: string;
+  lesson_id: string;
+  user_id: string;
+  completed: boolean;
+  completed_at: string | null;
+  time_spent_sec: number;
+  video_position_sec: number;
+  reflection_text: string;
+  quiz_score: number;
+  updated_at: string;
+}
+
+export interface LmsBadge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  course_id: string | null;
+  created_at: string;
+}
+
+export interface LmsUserBadge {
+  id: string;
+  badge_id: string;
+  user_id: string;
+  awarded_at: string;
+  badge?: LmsBadge;
+}
+
+export interface LmsOnboardingSettings {
+  id: number;
+  required_days: number;
+  required_course_ids: string[];
+  updated_by: string | null;
+  updated_at: string;
 }

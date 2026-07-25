@@ -4,11 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Flame, TrendingUp, Target, Award, Users, ChevronRight, Zap,
   Clock, CheckCircle, XCircle, Timer, Megaphone, BarChart3, Calendar,
-  Cake, CheckSquare, AlertTriangle,
+  Cake, CheckSquare, AlertTriangle, Trophy, Smartphone, Gauge, TrendingDown,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLevels } from '../contexts/LevelsContext';
-import { supabase, Lead, EodReport, ReviewSchedule, ClosingNewsFeed } from '../lib/supabase';
+import { supabase, Lead, EodReport, ReviewSchedule, ClosingNewsFeed, getCommissionRate } from '../lib/supabase';
 import AdminDashboard from './AdminDashboard';
 
 function StatCard({ label, value, icon, color, suffix = '' }: {
@@ -109,6 +109,12 @@ export default function Dashboard() {
   const [totalSlices, setTotalSlices] = useState(0);
   const [cakeLeaders, setCakeLeaders] = useState<{ name: string; slices: number }[]>([]);
   const [weeklyTasksDone, setWeeklyTasksDone] = useState<boolean | null>(null);
+  // Ch2: live leaderboard + monthly targets for forecast & pacing
+  const [leaderboard, setLeaderboard] = useState<{ id: string; full_name: string; monthly_pieces: number; lifetime_pieces: number }[]>([]);
+  const [targets, setTargets] = useState<{ target1: number; target2: number; target3: number }>({ target1: 0, target2: 0, target3: 0 });
+  // Ch2: PWA add-to-home-screen prompt
+  const [showA2hs, setShowA2hs] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   const loadDashboard = useCallback(async () => {
     if (!profile) return;
@@ -191,6 +197,27 @@ export default function Dashboard() {
       } else {
         setWeeklyTasksDone(null);
       }
+
+      // Ch2: leaderboard (excludes inactive + soft-deleted users)
+      const { data: lb } = await supabase
+        .from('profiles')
+        .select('id, full_name, monthly_pieces, lifetime_pieces')
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .order('monthly_pieces', { ascending: false })
+        .limit(10);
+      if (lb) setLeaderboard(lb as typeof leaderboard);
+
+      // Ch2: monthly targets for this user/month
+      const now = new Date();
+      const { data: mt } = await supabase
+        .from('monthly_targets')
+        .select('target1, target2, target3')
+        .eq('user_id', profile.id)
+        .eq('month', now.getMonth() + 1)
+        .eq('year', now.getFullYear())
+        .maybeSingle();
+      if (mt) setTargets(mt as typeof targets);
     }
   }, [profile]);
 
@@ -259,6 +286,39 @@ export default function Dashboard() {
   const pendingPieces = pendingReports.reduce((s, r) => s + (r.pieces_sold || r.total_pieces), 0);
   const pendingCommission = pendingPieces * 8;
   const isSunday = new Date().getDay() === 0;
+
+  // Ch2: capture PWA beforeinstallprompt for the Add-to-Home-Screen widget prompt
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      const dismissed = localStorage.getItem('mj-a2hs-dismissed');
+      if (!dismissed) setShowA2hs(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  // Ch2: Commission forecast + daily pacing computations
+  const currentRate = getCommissionRate(profile.lifetime_pieces, profile.monthly_pieces, targets.target2);
+  const currentCommission = profile.monthly_pieces * currentRate;
+  const nextTierPieces = Math.max(0, 5000 - profile.lifetime_pieces);
+  const nextTierRate = profile.lifetime_pieces >= 5000 ? 8 : 6;
+  const target2Distance = Math.max(0, targets.target2 - profile.monthly_pieces);
+  const target2Active = targets.target2 > 0 && profile.monthly_pieces >= targets.target2;
+
+  const now0 = new Date();
+  const daysInMonth = new Date(now0.getFullYear(), now0.getMonth() + 1, 0).getDate();
+  const daysRemaining = Math.max(1, daysInMonth - now0.getDate());
+  const monthlyPieces = profile.monthly_pieces;
+  function pacing(target: number) {
+    const remaining = Math.max(0, target - monthlyPieces);
+    const pace = target > 0 ? Math.ceil(remaining / daysRemaining) : 0;
+    return { remaining, pace };
+  }
+  const pace1 = pacing(targets.target1);
+  const pace2 = pacing(targets.target2);
+  const pace3 = pacing(targets.target3);
 
   const weeklySchedule = reviewSchedules.find(s => s.review_type === 'weekly_standup');
   const monthlySchedule = reviewSchedules.find(s => s.review_type === 'monthly_review');
@@ -452,6 +512,83 @@ export default function Dashboard() {
         </motion.div>
       )}
 
+      {/* Ch2: Live Commission Forecast + Daily Target Pacing */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5">
+        <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+          <Gauge className="w-4 h-4 text-gold-500" /> Commission Forecast
+        </h3>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-white/60">Current Rate</span>
+            <span className="text-gold-500 font-bold">₹{currentRate}/piece</span>
+          </div>
+          <div className="flex h-4 rounded-full overflow-hidden bg-surface-50">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-400 flex items-center justify-center text-[10px] text-white font-bold transition-all duration-500"
+              style={{ width: `${Math.min(100, (currentCommission / Math.max(1, currentCommission + nextTierPieces * nextTierRate + target2Distance * 8)) * 100)}%` }}>
+              ₹{currentCommission.toLocaleString('en-IN')}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+            <div className="p-2 rounded-lg bg-surface-50/30">
+              <div className="text-white/40">Gap to {profile.lifetime_pieces >= 5000 ? 'Elite' : '₹6'} Tier</div>
+              <div className="text-amber-400 font-semibold">{profile.lifetime_pieces >= 5000 ? 'Reached' : `${nextTierPieces.toLocaleString()} pieces`}</div>
+            </div>
+            <div className="p-2 rounded-lg bg-surface-50/30">
+              <div className="text-white/40">Target 2 Activation (₹8/piece)</div>
+              <div className={`${target2Active ? 'text-emerald-400' : 'text-orange-400'} font-semibold`}>
+                {target2Active ? 'Active' : `${target2Distance.toLocaleString()} pieces away`}
+              </div>
+            </div>
+          </div>
+        </div>
+        {(targets.target1 > 0 || targets.target2 > 0 || targets.target3 > 0) && (
+          <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
+            <div className="text-white/50 text-xs font-semibold uppercase tracking-wider flex items-center gap-1">
+              <TrendingDown className="w-3 h-3" /> Daily Pacing · {daysRemaining} days left this month
+            </div>
+            {[
+              { label: 'Target 1', ...pace1, target: targets.target1 },
+              { label: 'Target 2', ...pace2, target: targets.target2 },
+              { label: 'Target 3', ...pace3, target: targets.target3 },
+            ].filter(t => t.target > 0).map(t => (
+              <div key={t.label} className="flex items-center justify-between text-sm p-2 rounded-lg bg-surface-50/20">
+                <span className="text-white/60">{t.label} <span className="text-white/30">({t.target}p)</span></span>
+                <div className="flex items-center gap-3">
+                  <span className="text-white/50 text-xs">{t.remaining}p left</span>
+                  <span className="text-gold-500 font-semibold text-xs">{t.pace}p/day needed</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Ch2: Live Leaderboard — directly below Pieces Metrics & Target Cards, above Late Cake Board */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-white font-semibold flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-gold-500" /> Live Leaderboard
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          </h3>
+          <a href="/leaderboard" className="text-xs text-gold-500 hover:text-gold-400 flex items-center gap-1">
+            Full Board <ChevronRight className="w-3 h-3" />
+          </a>
+        </div>
+        <div className="space-y-1.5">
+          {leaderboard.slice(0, 5).map((m, i) => {
+            const isMe = m.id === profile.id;
+            return (
+              <div key={m.id} className={`flex items-center gap-3 p-2 rounded-lg transition-all ${isMe ? 'bg-gold-500/10 border border-gold-500/20' : 'bg-surface-50/20'}`}>
+                <span className={`w-6 text-center font-bold text-sm ${i === 0 ? 'text-gold-500' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-600' : 'text-white/40'}`}>{i + 1}</span>
+                <span className={`flex-1 text-sm truncate ${isMe ? 'text-gold-500 font-medium' : 'text-white/70'}`}>{m.full_name}{isMe && ' (You)'}</span>
+                <span className="text-gold-500 font-bold text-sm">{m.monthly_pieces}p</span>
+              </div>
+            );
+          })}
+          {leaderboard.length === 0 && <div className="text-white/30 text-sm text-center py-3">No rankings yet.</div>}
+        </div>
+      </motion.div>
+
       {/* Late Cake Wall */}
       {(totalSlices > 0 || mySlices > 0) && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5">
@@ -574,6 +711,21 @@ export default function Dashboard() {
               ? <span className="text-emerald-500 font-medium">Target reached!</span>
               : `${profile.manager_daily_target - profile.monthly_pieces} more needed`}
           </div>
+        </motion.div>
+      )}
+
+      {/* Ch2: PWA Add Leaderboard Widget to Home Screen prompt */}
+      {showA2hs && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-4 flex items-center gap-3 border border-gold-500/20">
+          <Smartphone className="w-5 h-5 text-gold-500 flex-shrink-0" />
+          <div className="flex-1">
+            <div className="text-white text-sm font-medium">Add Leaderboard Widget to Home Screen</div>
+            <div className="text-white/40 text-xs">Track the live leaderboard without opening the app.</div>
+          </div>
+          <button onClick={() => { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice?.finally(() => { setShowA2hs(false); setDeferredPrompt(null); }); } }}
+            className="btn-gold text-sm px-3 py-1.5">Add</button>
+          <button onClick={() => { localStorage.setItem('mj-a2hs-dismissed', '1'); setShowA2hs(false); }} className="text-white/30 hover:text-white/60 text-xs">Not now</button>
         </motion.div>
       )}
     </div>

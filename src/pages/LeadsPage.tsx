@@ -5,7 +5,7 @@ import {
   Plus, Search, Filter, Phone, Calendar, Clock, X, ChevronDown,
   CreditCard as Edit3, Trash2, DollarSign, LayoutList, Columns2 as Columns,
   AlertCircle, Truck, Package, MessageCircle, CheckCircle2, ExternalLink,
-  User, Hash, MapPin, ChevronRight,
+  User, Hash, MapPin, ChevronRight, Users,
 } from 'lucide-react';
 import { supabase, Lead, LeadStatus, PaymentType, Customer } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -116,6 +116,10 @@ type ViewMode = 'list' | 'kanban';
 type PaymentFilter = 'all' | 'prepaid' | 'cod';
 type OwnerFilter = 'mine' | 'all';
 
+// Ch3: Dead Leads 'Click All' override — only applies when viewing dead leads.
+// Lets sales reps see/search all team dead leads for revival calls without
+// affecting active-sales privacy. Active sales remain owner-scoped.
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function LeadsPage() {
   const { profile } = useAuth();
@@ -137,6 +141,7 @@ export default function LeadsPage() {
   const [showEditDrawer, setShowEditDrawer] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [clickAllDead, setClickAllDead] = useState(false); // Ch3: Dead Leads team-wide toggle
   const dragLeadId = useRef<string | null>(null);
 
   const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
@@ -150,13 +155,17 @@ export default function LeadsPage() {
       .order('updated_at', { ascending: false });
 
     if (isSalesExec || ownerFilter === 'mine') {
-      q = q.eq('owner_id', profile?.id ?? '');
+      // Ch3: when Click All is on AND we're filtering dead leads, show all team dead leads
+      const viewingDead = filterStatus === 'dead_lead' && clickAllDead;
+      if (!viewingDead) {
+        q = q.eq('owner_id', profile?.id ?? '');
+      }
     }
 
     const { data } = await q;
     if (data) setLeads(data as Lead[]);
     setLoading(false);
-  }, [profile, isSalesExec, ownerFilter]);
+  }, [profile, isSalesExec, ownerFilter, filterStatus, clickAllDead]);
 
   useEffect(() => {
     fetchLeads();
@@ -409,6 +418,16 @@ export default function LeadsPage() {
             </select>
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
           </div>
+        )}
+        {/* Ch3: Dead Leads 'Click All' team-wide toggle — only for sales reps viewing dead leads */}
+        {isSalesExec && filterStatus === 'dead_lead' && viewMode === 'list' && (
+          <button
+            onClick={() => setClickAllDead(v => !v)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${clickAllDead ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-white/5 text-white/40 border-white/10 hover:text-white/70'}`}
+            title="View all team dead leads for revival calls"
+          >
+            <Users className="w-3.5 h-3.5" /> {clickAllDead ? 'Showing All Team Dead Leads' : 'Click All — Team Dead Leads'}
+          </button>
         )}
         <div className="flex bg-surface-50/30 border border-white/10 rounded-xl p-1 gap-1">
           {(['all', 'prepaid', 'cod'] as const).map(f => (

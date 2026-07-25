@@ -30,7 +30,7 @@ const FIELDS: FieldConfig[] = [
   { key: 'total_pieces',    label: 'Total Pieces',     icon: <Package className="w-4 h-4" />,        color: '#FFD700' },
 ];
 
-type EodTab = 'submit' | 'history';
+type EodTab = 'submit' | 'history' | 'full_history';
 
 export default function EodPage() {
   const { profile, refreshProfile } = useAuth();
@@ -41,6 +41,10 @@ export default function EodPage() {
   const [submitted, setSubmitted] = useState(false);
   const [todayReport, setTodayReport] = useState<EodReport | null>(null);
   const [history, setHistory] = useState<EodReport[]>([]);
+  const [staffList, setStaffList] = useState<{ id: string; full_name: string }[]>([]);
+  const [fullHistory, setFullHistory] = useState<(EodReport & { staff_name?: string })[]>([]);
+  const [historyFilterUserId, setHistoryFilterUserId] = useState<string>('all');
+  const isPrivileged = ['admin', 'hr', 'manager'].includes(profile?.role ?? '');
   const today = new Date().toISOString().split('T')[0];
 
   async function loadReportForDate(date: string) {
@@ -82,6 +86,25 @@ export default function EodPage() {
     if (hist) setHistory(hist as EodReport[]);
   }
 
+  // Ch3: Full historical EOD report engine — admin/hr/manager can view every report
+  // since inception, filterable by staff member.
+  async function loadFullHistory() {
+    const { data: staff } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('is_active', true)
+      .order('full_name');
+    if (staff) setStaffList(staff as typeof staffList);
+    await refreshFullHistory(historyFilterUserId);
+  }
+
+  async function refreshFullHistory(userId: string) {
+    let q = supabase.from('eod_reports').select('*, profiles!eod_reports_user_id_fkey(full_name)').order('date', { ascending: false });
+    if (userId !== 'all') q = q.eq('user_id', userId);
+    const { data } = await q.limit(500);
+    setFullHistory((data as (EodReport & { staff_name?: string })[]) ?? []);
+  }
+
   useEffect(() => {
     if (!profile) return;
     loadReportForDate(reportDate);
@@ -89,7 +112,13 @@ export default function EodPage() {
 
   useEffect(() => {
     if (tab === 'history') loadHistory();
-  }, [tab, profile]);
+    if (tab === 'full_history' && isPrivileged) loadFullHistory();
+  }, [tab, profile, isPrivileged]);
+
+  // Ch3: reload full history when the staff filter changes
+  useEffect(() => {
+    if (tab === 'full_history' && isPrivileged) refreshFullHistory(historyFilterUserId);
+  }, [historyFilterUserId, tab, isPrivileged]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -167,8 +196,14 @@ export default function EodPage() {
           </button>
           <button onClick={() => setTab('history')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === 'history' ? 'bg-gold-500/15 text-gold-500' : 'text-white/40 hover:text-white/70'}`}>
-            <History className="w-3.5 h-3.5" /> History
+            <History className="w-3.5 h-3.5" /> My History
           </button>
+          {isPrivileged && (
+            <button onClick={() => setTab('full_history')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === 'full_history' ? 'bg-gold-500/15 text-gold-500' : 'text-white/40 hover:text-white/70'}`}>
+              <Users className="w-3.5 h-3.5" /> Full History
+            </button>
+          )}
         </div>
       </div>
 
@@ -318,6 +353,64 @@ export default function EodPage() {
                           {r.rejection_reason && (
                             <span className="text-red-400/70 text-xs">Rejected: {r.rejection_reason}</span>
                           )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+        {tab === 'full_history' && isPrivileged && (
+          <motion.div key="full_history" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-3">
+            <div className="glass-card p-4 flex items-center gap-3 flex-wrap">
+              <Users className="w-4 h-4 text-gold-500 flex-shrink-0" />
+              <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Filter by Staff Member</label>
+              <select
+                value={historyFilterUserId}
+                onChange={e => setHistoryFilterUserId(e.target.value)}
+                className="input-dark flex-1 min-w-48 text-sm"
+              >
+                <option value="all">All Staff</option>
+                {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+              </select>
+              <span className="text-white/30 text-xs bg-white/5 px-2 py-0.5 rounded-full">{fullHistory.length} reports</span>
+            </div>
+            <div className="glass-card overflow-hidden">
+              {fullHistory.length === 0 ? (
+                <div className="p-12 text-center text-white/30 text-sm">No reports found.</div>
+              ) : (
+                <div className="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
+                  {fullHistory.map(r => {
+                    const statusColors = { pending: '#f59e0b', verified: '#10b981', rejected: '#ef4444' };
+                    const statusColor = statusColors[r.status as keyof typeof statusColors] || '#6b7280';
+                    const staffName = (r as any).profiles?.full_name ?? 'Unknown';
+                    return (
+                      <div key={r.id} className="p-4">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-gold-500/80 text-xs font-medium">{staffName}</div>
+                            <div className="flex items-center gap-3 mt-0.5">
+                              <div className="text-white font-medium text-sm">
+                                {new Date(r.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                              <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                style={{ backgroundColor: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}30` }}>
+                                {r.status}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="text-gold-500 font-bold text-sm">{r.total_pieces}p</div>
+                            <div className="text-emerald-400 text-xs">₹{(r.total_pieces * 8).toLocaleString('en-IN')}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 mt-2 flex-wrap">
+                          <span className="text-white/30 text-xs">Calls: {r.accepted_calls}</span>
+                          <span className="text-white/30 text-xs">Billed: {r.billed_clients}</span>
+                          <span className="text-white/30 text-xs">Chats: {r.positive_chats}</span>
+                          {r.daily_notes && <span className="text-white/30 text-xs truncate max-w-xs">“{r.daily_notes}”</span>}
                         </div>
                       </div>
                     );

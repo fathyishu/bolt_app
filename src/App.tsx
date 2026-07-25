@@ -2,7 +2,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LevelsProvider } from './contexts/LevelsContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/Layout';
+import OnboardingGate from './components/OnboardingGate';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import LeadsPage from './pages/LeadsPage';
@@ -15,6 +17,7 @@ import TvMode from './pages/TvMode';
 import VerificationQueue from './pages/VerificationQueue';
 import HRPage from './pages/HRPage';
 import ProfilePage from './pages/ProfilePage';
+import TrainingPage from './pages/TrainingPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -66,32 +69,35 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Layout>
-              <Routes>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/sales" element={<LeadsPage />} />
-                <Route path="/leads" element={<Navigate to="/sales" replace />} />
-                <Route path="/customers" element={<CustomersPage />} />
-                <Route path="/eod" element={<EodPage />} />
-                <Route path="/leaderboard" element={<LeaderboardPage />} />
-                <Route path="/tasks" element={<TasksPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/verify" element={
-                  <HRRoute>
-                    <VerificationQueue />
-                  </HRRoute>
-                } />
-                <Route path="/hr" element={
-                  <HRRoute>
-                    <HRPage />
-                  </HRRoute>
-                } />
-                <Route path="/admin" element={
-                  <AdminRoute>
-                    <AdminPage />
-                  </AdminRoute>
-                } />
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
-              </Routes>
+              <OnboardingGate>
+                <Routes>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/sales" element={<LeadsPage />} />
+                  <Route path="/leads" element={<Navigate to="/sales" replace />} />
+                  <Route path="/customers" element={<CustomersPage />} />
+                  <Route path="/eod" element={<EodPage />} />
+                  <Route path="/leaderboard" element={<LeaderboardPage />} />
+                  <Route path="/tasks" element={<TasksPage />} />
+                  <Route path="/training" element={<TrainingPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/verify" element={
+                    <HRRoute>
+                      <VerificationQueue />
+                    </HRRoute>
+                  } />
+                  <Route path="/hr" element={
+                    <HRRoute>
+                      <HRPage />
+                    </HRRoute>
+                  } />
+                  <Route path="/admin" element={
+                    <AdminRoute>
+                      <AdminPage />
+                    </AdminRoute>
+                  } />
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </OnboardingGate>
             </Layout>
           </ProtectedRoute>
         }
@@ -104,11 +110,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <LevelsProvider>
-          <AppRoutes />
-        </LevelsProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <LevelsProvider>
+            <AppRoutes />
+          </LevelsProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

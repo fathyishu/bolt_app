@@ -31,9 +31,47 @@
     color: #f9fafb;
     font-family: 'Inter', system-ui, sans-serif;
   }
+
+  /* Light mode overrides — applied when <html> has .light */
+  .light body {
+    background-color: #f4f5f7;
+    color: #1a1a1a;
+  }
+  .light *::-webkit-scrollbar-track {
+    background: #e9eaee;
+  }
+  .light *::-webkit-scrollbar-thumb {
+    background: #c8a800;
+  }
 }
 
 @layer components {
+  .light .glass-card {
+    @apply bg-white border border-black/5;
+  }
+  .light .input-dark {
+    @apply bg-surface-50/80 border-black/10 text-black placeholder-black/30;
+  }
+  .light .stat-card {
+    @apply bg-white border border-black/5;
+  }
+  .light .btn-outline-gold {
+    @apply border-gold-500/50 text-gold-700;
+  }
+  .light .btn-gold {
+    @apply text-black;
+  }
+  .light .text-white {
+    @apply text-black;
+  }
+  .light .text-white\/40 { @apply text-black\/40; }
+  .light .text-white\/50 { @apply text-black\/50; }
+  .light .text-white\/70 { @apply text-black\/70; }
+  .light .bg-surface-50\/30 { @apply bg-black\/5; }
+  .light .bg-surface-50\/50 { @apply bg-black\/5; }
+  .light .border-white\/5 { @apply border-black\/5; }
+  .light .border-white\/10 { @apply border-black\/10; }
+
   .glass-card {
     @apply bg-surface-200 border border-white/5 rounded-xl;
     backdrop-filter: blur(10px);
