@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LevelsProvider } from './contexts/LevelsContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/Layout';
-import OnboardingGate from './components/OnboardingGate';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import LeadsPage from './pages/LeadsPage';
@@ -69,8 +68,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Layout>
-              <OnboardingGate>
-                <Routes>
+              <Routes>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/sales" element={<LeadsPage />} />
                   <Route path="/leads" element={<Navigate to="/sales" replace />} />
@@ -97,7 +95,6 @@ function AppRoutes() {
                   } />
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
-              </OnboardingGate>
             </Layout>
           </ProtectedRoute>
         }

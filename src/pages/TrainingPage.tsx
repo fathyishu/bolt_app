@@ -4,15 +4,15 @@ import {
   GraduationCap, Plus, ChevronRight, ChevronDown, PlayCircle, FileText,
   Music, Image as ImageIcon, Lock, Award, BarChart3, Clock, CheckCircle2,
   Layers, BookOpen, Video, PencilLine, Trash2, Save, Sparkles, Loader2,
+  HelpCircle, GripVertical,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import type {
   LmsCategory, LmsCourse, LmsModule, LmsLesson, LmsCheckpoint, LmsFlashcard,
-  LmsLessonProgress, LmsUserBadge, LmsContentKind,
+  LmsLessonProgress, LmsUserBadge, LmsContentKind, LmsAssetType,
   Profile,
 } from '../lib/supabase';
-import { useOnboarding } from '../hooks/useOnboarding';
 import LessonVideo from '../components/lms/LessonVideo';
 import AssetUploader from '../components/lms/AssetUploader';
 import FlashcardDeck from '../components/lms/FlashcardDeck';
@@ -21,7 +21,6 @@ type View = 'portal' | 'course' | 'lesson' | 'builder' | 'analytics';
 
 export default function TrainingPage() {
   const { profile } = useAuth();
-  const onboarding = useOnboarding(profile);
   const isPrivileged = ['admin', 'hr', 'manager'].includes(profile?.role ?? '');
 
   const [view, setView] = useState<View>('portal');
@@ -53,7 +52,6 @@ export default function TrainingPage() {
         courses={courses}
         loading={loading}
         isPrivileged={isPrivileged}
-        onboarding={onboarding}
         onOpenCourse={(cid) => { setActiveCourseId(cid); setView('course'); }}
         onNewCourse={() => { setEditingCourseId(null); setView('builder'); }}
         onEditCourse={(cid) => { setEditingCourseId(cid); setView('builder'); }}
@@ -81,7 +79,7 @@ export default function TrainingPage() {
         lessonId={activeLessonId}
         userId={profile!.id}
         onBack={() => setView('course')}
-        onCompleted={onboarding.refresh}
+        onCompleted={async () => {}}
       />
     );
   }
@@ -111,14 +109,13 @@ export default function TrainingPage() {
 
 // ── Portal View ──────────────────────────────────────────────────────────────
 function PortalView({
-  categories, courses, loading, isPrivileged, onboarding,
+  categories, courses, loading, isPrivileged,
   onOpenCourse, onNewCourse, onEditCourse, onOpenAnalytics,
 }: {
   categories: LmsCategory[];
   courses: LmsCourse[];
   loading: boolean;
   isPrivileged: boolean;
-  onboarding: ReturnType<typeof useOnboarding>;
   onOpenCourse: (id: string) => void;
   onNewCourse: () => void;
   onEditCourse: (id: string) => void;
@@ -132,9 +129,7 @@ function PortalView({
             <GraduationCap className="w-6 h-6 text-gold-500" /> Training Portal
           </h1>
           <p className="text-white/40 text-sm mt-0.5">
-            {onboarding.isUnlocked
-              ? 'Complete courses to earn badges and climb the leaderboard.'
-              : 'Complete your onboarding training to unlock the rest of the app.'}
+            Complete courses to earn badges and climb the leaderboard.
           </p>
         </div>
         {isPrivileged && (
@@ -143,42 +138,11 @@ function PortalView({
               <BarChart3 className="w-4 h-4" /> Analytics
             </button>
             <button onClick={onNewCourse} className="btn-gold flex items-center gap-2 text-sm">
-              <Plus className="w-4 h-4" /> New Course
+              <Plus className="w-4 h-4" /> Add New Course
             </button>
           </div>
         )}
       </div>
-
-      {/* Onboarding progress banner for locked users */}
-      {!onboarding.isUnlocked && !onboarding.loading && (
-        <div className="glass-card p-5 border border-gold-500/20">
-          <div className="flex items-center gap-2 text-gold-500 font-semibold text-sm mb-3">
-            <Lock className="w-4 h-4" /> Onboarding Progress
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <div className="text-white/40 text-xs uppercase tracking-wider mb-1">Training Days</div>
-              <div className="text-white font-medium">
-                {onboarding.daysCompleted} / {onboarding.requiredDays || 0} days
-              </div>
-              <div className="h-2 bg-surface-50 rounded-full mt-2 overflow-hidden">
-                <div className="h-full bg-gold-500 rounded-full transition-all"
-                  style={{ width: `${onboarding.requiredDays ? Math.min(100, (onboarding.daysCompleted / onboarding.requiredDays) * 100) : 0}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="text-white/40 text-xs uppercase tracking-wider mb-1">Required Courses</div>
-              <div className="text-white font-medium">
-                {onboarding.coursesCompleted} / {onboarding.requiredCourseIds.length} courses
-              </div>
-              <div className="h-2 bg-surface-50 rounded-full mt-2 overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full transition-all"
-                  style={{ width: `${onboarding.requiredCourseIds.length ? Math.min(100, (onboarding.coursesCompleted / onboarding.requiredCourseIds.length) * 100) : 0}%` }} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {loading ? (
         <div className="flex justify-center py-16">
@@ -202,9 +166,14 @@ function PortalView({
                       key={course.id}
                       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                       whileHover={{ scale: 1.02 }}
-                      className="glass-card p-4 cursor-pointer group hover:border-gold-500/30 transition-all"
+                      className="glass-card p-4 cursor-pointer group hover:border-gold-500/30 transition-all overflow-hidden"
                       onClick={() => onOpenCourse(course.id)}
                     >
+                      {course.thumbnail_url && (
+                        <div className="relative -mx-4 -mt-4 mb-3 h-24 overflow-hidden">
+                          <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+                        </div>
+                      )}
                       <div className="flex items-start justify-between gap-2">
                         <BookOpen className="w-5 h-5 text-gold-500/70 group-hover:text-gold-500" />
                         {isPrivileged && (
@@ -229,6 +198,12 @@ function PortalView({
               </div>
             );
           })}
+          {courses.length === 0 && isPrivileged && (
+            <div className="glass-card p-8 text-center">
+              <GraduationCap className="w-10 h-10 text-white/20 mx-auto mb-3" />
+              <p className="text-white/40 text-sm">No courses yet. Click "Add New Course" to create your first course.</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -284,6 +259,11 @@ function CourseView({
       <button onClick={onBack} className="text-white/40 hover:text-white text-sm flex items-center gap-1">
         <ChevronRight className="w-4 h-4 rotate-180" /> Back to Portal
       </button>
+      {course.thumbnail_url && (
+        <div className="relative w-full h-40 rounded-xl overflow-hidden border border-white/10">
+          <img src={course.thumbnail_url} alt={course.title} className="w-full h-full object-cover" />
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">{course.title}</h1>
@@ -311,7 +291,10 @@ function CourseView({
         if (modLessons.length === 0) return null;
         return (
           <div key={mod.id} className="glass-card p-4">
-            <div className="text-white font-semibold mb-1">{mod.title}</div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-white/30 text-xs font-mono">#{mod.sort_order + 1}</span>
+              <div className="text-white font-semibold">{mod.title}</div>
+            </div>
             {mod.description && <div className="text-white/40 text-xs mb-3">{mod.description}</div>}
             <div className="space-y-2">
               {modLessons.map(lesson => {
@@ -509,40 +492,64 @@ function CourseBuilder({ courseId, categories, onSaved, onBack }: {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState<string>(categories[0]?.id ?? '');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [modules, setModules] = useState<LmsModule[]>([]);
   const [lessons, setLessons] = useState<LmsLesson[]>([]);
   const [expandedMod, setExpandedMod] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [activeCourseId, setActiveCourseId] = useState<string | null>(courseId);
 
   const load = useCallback(async () => {
-    if (!courseId) { setLoading(false); return; }
+    if (!activeCourseId) { setLoading(false); return; }
     const [{ data: c }, { data: mods }] = await Promise.all([
-      supabase.from('lms_courses').select('*').eq('id', courseId).maybeSingle(),
-      supabase.from('lms_modules').select('*').eq('course_id', courseId).order('sort_order', { ascending: true }),
+      supabase.from('lms_courses').select('*').eq('id', activeCourseId).maybeSingle(),
+      supabase.from('lms_modules').select('*').eq('course_id', activeCourseId).order('sort_order', { ascending: true }),
     ]);
-    if (c) { setTitle(c.title); setDescription(c.description); setCategoryId(c.category_id ?? ''); }
+    if (c) {
+      setTitle(c.title);
+      setDescription(c.description);
+      setCategoryId(c.category_id ?? '');
+      setThumbnailUrl(c.thumbnail_url ?? '');
+    }
     setModules((mods as LmsModule[]) ?? []);
     setLoading(false);
-  }, [courseId]);
+  }, [activeCourseId]);
 
   useEffect(() => { load(); }, [load]);
 
+  // reload lessons whenever modules change
+  const reloadLessons = useCallback(async () => {
+    if (modules.length === 0) { setLessons([]); return; }
+    const { data } = await supabase.from('lms_lessons').select('*').in('module_id', modules.map(m => m.id)).order('sort_order', { ascending: true });
+    setLessons((data as LmsLesson[]) ?? []);
+  }, [modules]);
+
+  useEffect(() => { reloadLessons(); }, [reloadLessons]);
+
   async function saveCourseHeader() {
     setSaving(true);
-    if (courseId) {
-      await supabase.from('lms_courses').update({ title, description, category_id: categoryId || null }).eq('id', courseId);
+    if (activeCourseId) {
+      await supabase.from('lms_courses').update({
+        title, description, category_id: categoryId || null, thumbnail_url: thumbnailUrl || null,
+      }).eq('id', activeCourseId);
     } else {
-      const { data } = await supabase.from('lms_courses').insert({ title, description, category_id: categoryId || null }).select().single();
-      if (data) { onSaved(); return; }
+      const { data } = await supabase.from('lms_courses').insert({
+        title, description, category_id: categoryId || null, thumbnail_url: thumbnailUrl || null,
+      }).select().single();
+      if (data) {
+        setActiveCourseId((data as LmsCourse).id);
+        setSaving(false);
+        return;
+      }
     }
     setSaving(false);
   }
 
   async function addModule() {
-    if (!courseId) return;
+    if (!activeCourseId) return;
     const { data } = await supabase.from('lms_modules')
-      .insert({ course_id: courseId, title: 'New Module', description: '', sort_order: modules.length })
+      .insert({ course_id: activeCourseId, title: 'New Module', description: '', sort_order: modules.length })
       .select().single();
     if (data) { setModules(prev => [...prev, data as LmsModule]); setExpandedMod((data as LmsModule).id); }
   }
@@ -559,13 +566,6 @@ function CourseBuilder({ courseId, categories, onSaved, onBack }: {
     setLessons(prev => prev.filter(l => l.module_id !== mod.id));
   }
 
-  async function addLesson(mod: LmsModule) {
-    const { data } = await supabase.from('lms_lessons')
-      .insert({ module_id: mod.id, title: 'New Lesson', description: '', sort_order: 0 })
-      .select().single();
-    if (data) setLessons(prev => [...prev, data as LmsLesson]);
-  }
-
   if (loading) return <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-gold-500/30 border-t-gold-500 rounded-full animate-spin" /></div>;
 
   return (
@@ -574,33 +574,43 @@ function CourseBuilder({ courseId, categories, onSaved, onBack }: {
         <ChevronRight className="w-4 h-4 rotate-180" /> Back to Portal
       </button>
       <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-        <PencilLine className="w-6 h-6 text-gold-500" /> {courseId ? 'Edit Course' : 'New Course'}
+        <PencilLine className="w-6 h-6 text-gold-500" /> {activeCourseId ? 'Edit Course' : 'New Course'}
       </h1>
 
-      {/* Course header */}
+      {/* Course header — Tier 1 */}
       <div className="glass-card p-5 space-y-3">
         <div>
-          <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">Title</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className="input-dark w-full" placeholder="Course title" />
+          <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">Course Name</label>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className="input-dark w-full" placeholder="e.g. Sales Mastery 101" />
         </div>
         <div>
           <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">Description</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="input-dark w-full resize-none" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">Category</label>
+          <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">Category Tag</label>
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="input-dark w-full">
             <option value="">— No category —</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
+        <div>
+          <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wider">Thumbnail URL</label>
+          <input value={thumbnailUrl} onChange={(e) => setThumbnailUrl(e.target.value)} className="input-dark w-full" placeholder="https://images.pexels.com/…/photo.jpg" />
+          {thumbnailUrl && (
+            <div className="mt-2 w-full h-24 rounded-xl overflow-hidden border border-white/10">
+              <img src={thumbnailUrl} alt="Thumbnail preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            </div>
+          )}
+        </div>
         <button onClick={saveCourseHeader} disabled={saving || !title} className="btn-gold flex items-center gap-2 text-sm">
-          <Save className="w-4 h-4" /> {courseId ? 'Save Header' : 'Create Course'}
+          <Save className="w-4 h-4" /> {activeCourseId ? 'Save Header' : 'Create Course'}
         </button>
       </div>
 
-      {courseId && (
+      {activeCourseId && (
         <div className="space-y-3">
+          {/* Tier 2 — Modules */}
           <div className="flex items-center justify-between">
             <h2 className="text-white font-semibold flex items-center gap-2"><Layers className="w-5 h-5 text-gold-500" /> Modules</h2>
             <button onClick={addModule} className="btn-outline-gold flex items-center gap-2 text-sm">
@@ -616,30 +626,44 @@ function CourseBuilder({ courseId, categories, onSaved, onBack }: {
               onToggle={() => setExpandedMod(expandedMod === mod.id ? null : mod.id)}
               onRename={(t) => renameModule(mod, t)}
               onDelete={() => deleteModule(mod)}
-              onAddLesson={() => addLesson(mod)}
-              onLessonsChanged={() => {
-                supabase.from('lms_lessons').select('*').in('module_id', modules.map(m => m.id)).then(({ data }) => {
-                  setLessons((data as LmsLesson[]) ?? []);
-                });
-              }}
+              onLessonsChanged={reloadLessons}
             />
           ))}
+          {modules.length === 0 && (
+            <div className="glass-card p-6 text-center text-white/30 text-sm border-dashed border-white/10">
+              No modules yet. Click "Add Module" to start building this course.
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function ModuleEditor({ mod, lessons, expanded, onToggle, onRename, onDelete, onAddLesson, onLessonsChanged }: {
+// ── Module Editor — Tier 2 ───────────────────────────────────────────────────
+function ModuleEditor({ mod, lessons, expanded, onToggle, onRename, onDelete, onLessonsChanged }: {
   mod: LmsModule;
   lessons: LmsLesson[];
   expanded: boolean;
   onToggle: () => void;
   onRename: (t: string) => void;
   onDelete: () => void;
-  onAddLesson: () => void;
   onLessonsChanged: () => void;
 }) {
+  const [summary, setSummary] = useState(mod.description ?? '');
+  const [sortOrder, setSortOrder] = useState(mod.sort_order ?? 0);
+
+  async function saveModuleMeta() {
+    await supabase.from('lms_modules').update({ description: summary, sort_order: Number(sortOrder) }).eq('id', mod.id);
+  }
+
+  async function addLesson() {
+    const { data } = await supabase.from('lms_lessons')
+      .insert({ module_id: mod.id, title: 'New Element', description: '', content_kind: 'video', sort_order: lessons.length })
+      .select().single();
+    if (data) onLessonsChanged();
+  }
+
   return (
     <div className="glass-card p-4">
       <div className="flex items-center gap-2">
@@ -654,17 +678,32 @@ function ModuleEditor({ mod, lessons, expanded, onToggle, onRename, onDelete, on
         <button onClick={onDelete} className="text-white/20 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
       </div>
       {expanded && (
-        <div className="mt-3 space-y-2">
-          {lessons.map(l => <LessonEditor key={l.id} lesson={l} onSaved={onLessonsChanged} />)}
-          <button onClick={onAddLesson} className="w-full p-2 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-gold-500 hover:border-gold-500/30 text-xs flex items-center justify-center gap-1">
-            <Plus className="w-3.5 h-3.5" /> Add Lesson
-          </button>
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="block text-xs text-white/50 mb-1 uppercase">Summary</label>
+              <input value={summary} onChange={(e) => setSummary(e.target.value)} onBlur={saveModuleMeta} className="input-dark w-full text-sm" placeholder="Short summary" />
+            </div>
+            <div>
+              <label className="block text-xs text-white/50 mb-1 uppercase">Order #</label>
+              <input type="number" min={0} value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))} onBlur={saveModuleMeta} className="input-dark w-full text-sm" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {lessons.map(l => <LessonEditor key={l.id} lesson={l} onSaved={onLessonsChanged} />)}
+            {/* Tier 3 — Add Element/Lesson */}
+            <button onClick={addLesson} className="w-full p-2 rounded-xl border border-dashed border-white/10 text-white/40 hover:text-gold-500 hover:border-gold-500/30 text-xs flex items-center justify-center gap-1">
+              <Plus className="w-3.5 h-3.5" /> Add Element / Lesson
+            </button>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
+// ── Lesson/Element Editor — Tier 3 ───────────────────────────────────────────
 function LessonEditor({ lesson, onSaved }: { lesson: LmsLesson; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -680,6 +719,21 @@ function LessonEditor({ lesson, onSaved }: { lesson: LmsLesson; onSaved: () => v
     reflection_prompt: lesson.reflection_prompt,
   });
   const [saving, setSaving] = useState(false);
+  const [checkpoints, setCheckpoints] = useState<LmsCheckpoint[]>([]);
+  const [flashcards, setFlashcards] = useState<LmsFlashcard[]>([]);
+  const [showCpForm, setShowCpForm] = useState(false);
+  const [showFcForm, setShowFcForm] = useState(false);
+
+  const loadExtras = useCallback(async () => {
+    const [{ data: cps }, { data: fcs }] = await Promise.all([
+      supabase.from('lms_checkpoints').select('*').eq('lesson_id', lesson.id).order('timestamp_sec', { ascending: true }),
+      supabase.from('lms_flashcards').select('*').eq('lesson_id', lesson.id).order('sort_order', { ascending: true }),
+    ]);
+    setCheckpoints((cps as LmsCheckpoint[]) ?? []);
+    setFlashcards((fcs as LmsFlashcard[]) ?? []);
+  }, [lesson.id]);
+
+  useEffect(() => { if (open) loadExtras(); }, [open, loadExtras]);
 
   async function save() {
     setSaving(true);
@@ -700,7 +754,7 @@ function LessonEditor({ lesson, onSaved }: { lesson: LmsLesson; onSaved: () => v
   }
 
   async function deleteLesson() {
-    if (!confirm('Delete this lesson?')) return;
+    if (!confirm('Delete this element?')) return;
     await supabase.from('lms_lessons').delete().eq('id', lesson.id);
     onSaved();
   }
@@ -710,64 +764,253 @@ function LessonEditor({ lesson, onSaved }: { lesson: LmsLesson; onSaved: () => v
       <div className="flex items-center gap-2 p-3">
         <button onClick={() => setOpen(!open)} className="flex items-center gap-2 flex-1 text-left">
           {open ? <ChevronDown className="w-4 h-4 text-gold-500" /> : <ChevronRight className="w-4 h-4 text-white/40" />}
-          <span className="text-white/80 text-sm font-medium">{form.title || 'Untitled Lesson'}</span>
+          <span className="text-white/80 text-sm font-medium">{form.title || 'Untitled Element'}</span>
         </button>
         <button onClick={deleteLesson} className="text-white/20 hover:text-red-400 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
       </div>
       {open && (
         <div className="p-3 pt-0 space-y-3">
-          <input value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))} className="input-dark w-full text-sm" placeholder="Lesson title" />
+          <input value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))} className="input-dark w-full text-sm" placeholder="Element title" />
           <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className="input-dark w-full resize-none text-sm" placeholder="Description" />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-white/50 mb-1 uppercase">Content Kind</label>
-              <select value={form.content_kind} onChange={(e) => setForm(f => ({ ...f, content_kind: e.target.value as LmsContentKind }))} className="input-dark w-full text-sm">
-                <option value="video">Video</option>
-                <option value="asset">Asset (PDF/Audio/Image)</option>
-                <option value="text">Text</option>
-                <option value="interactive">Interactive</option>
-              </select>
+          {/* Element type selector */}
+          <div>
+            <label className="block text-xs text-white/50 mb-1 uppercase">Element Type</label>
+            <select value={form.content_kind} onChange={(e) => setForm(f => ({ ...f, content_kind: e.target.value as LmsContentKind }))} className="input-dark w-full text-sm">
+              <option value="video">Video (upload or YouTube/Vimeo/Drive URL)</option>
+              <option value="interactive">Interactive Questionnaire (MCQ / Reflection)</option>
+              <option value="flashcard">Objection Flashcard (front/back)</option>
+              <option value="asset">Attachment (PDF / Audio)</option>
+            </select>
+          </div>
+
+          {/* ── Video element ── */}
+          {form.content_kind === 'video' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-white/50 mb-1 uppercase">Duration (sec)</label>
+                  <input type="number" min={0} value={form.video_duration_sec} onChange={(e) => setForm(f => ({ ...f, video_duration_sec: Number(e.target.value) }))} className="input-dark w-full text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-white/50 mb-1 uppercase">External Video URL (YouTube / Vimeo / Google Drive)</label>
+                <input value={form.video_url} onChange={(e) => setForm(f => ({ ...f, video_url: e.target.value }))} className="input-dark w-full text-sm" placeholder="https://youtube.com/watch?v=…" />
+              </div>
+              <div>
+                <label className="block text-xs text-white/50 mb-1 uppercase">Or upload a video file</label>
+                <AssetUploader
+                  assetType={form.asset_type}
+                  assetUrl={form.asset_url}
+                  storagePath={form.asset_storage_path}
+                  onUploaded={(url, path, type) => setForm(f => ({ ...f, asset_url: url, asset_storage_path: path, asset_type: type }))}
+                  onClear={() => setForm(f => ({ ...f, asset_url: null, asset_storage_path: null, asset_type: null }))}
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={form.unskippable} onChange={(e) => setForm(f => ({ ...f, unskippable: e.target.checked }))} className="w-4 h-4 rounded accent-gold-500" />
+                <span className="text-sm text-white/70 flex items-center gap-1"><Lock className="w-3.5 h-3.5 text-amber-400" /> Unskippable (reveal completion only after full playback)</span>
+              </label>
+
+              {/* In-video knowledge checkpoints */}
+              <div className="rounded-lg border border-white/10 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-white/50 uppercase tracking-wider flex items-center gap-1"><Sparkles className="w-3 h-3" /> Knowledge Checkpoints</span>
+                  <button onClick={() => setShowCpForm(!showCpForm)} className="text-xs text-gold-500 hover:text-gold-400 flex items-center gap-1">
+                    <Plus className="w-3 h-3" /> Add
+                  </button>
+                </div>
+                {checkpoints.map(cp => (
+                  <div key={cp.id} className="text-xs text-white/50 flex items-center gap-2">
+                    <Clock className="w-3 h-3" /> {cp.timestamp_sec}s · {cp.question}
+                    <button onClick={async () => { await supabase.from('lms_checkpoints').delete().eq('id', cp.id); loadExtras(); }} className="ml-auto text-white/20 hover:text-red-400">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {showCpForm && (
+                  <CheckpointForm lessonId={lesson.id} onSaved={() => { setShowCpForm(false); loadExtras(); }} />
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── Interactive Questionnaire ── */}
+          {form.content_kind === 'interactive' && (
+            <>
+              <div>
+                <label className="block text-xs text-white/50 mb-1 uppercase">Reflection Prompt (free-text)</label>
+                <textarea value={form.reflection_prompt} onChange={(e) => setForm(f => ({ ...f, reflection_prompt: e.target.value }))} rows={2} className="input-dark w-full resize-none text-sm" placeholder="e.g. Summarize the 3-step closing technique you just learned." />
+              </div>
+              <p className="text-xs text-white/40">MCQ checkpoints below appear during video playback. For a standalone interactive element, add a video above (optional) and create checkpoints, or use the reflection prompt for a free-text response.</p>
+              <div className="rounded-lg border border-white/10 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-white/50 uppercase tracking-wider flex items-center gap-1"><Sparkles className="w-3 h-3" /> MCQ Checkpoints</span>
+                  <button onClick={() => setShowCpForm(!showCpForm)} className="text-xs text-gold-500 hover:text-gold-400 flex items-center gap-1">
+                    <Plus className="w-3 h-3" /> Add
+                  </button>
+                </div>
+                {checkpoints.map(cp => (
+                  <div key={cp.id} className="text-xs text-white/50 flex items-center gap-2">
+                    <HelpCircle className="w-3 h-3" /> {cp.question}
+                    <button onClick={async () => { await supabase.from('lms_checkpoints').delete().eq('id', cp.id); loadExtras(); }} className="ml-auto text-white/20 hover:text-red-400">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {showCpForm && (
+                  <CheckpointForm lessonId={lesson.id} onSaved={() => { setShowCpForm(false); loadExtras(); }} />
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── Objection Flashcard ── */}
+          {form.content_kind === 'flashcard' && (
+            <div className="rounded-lg border border-white/10 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/50 uppercase tracking-wider flex items-center gap-1"><HelpCircle className="w-3 h-3" /> Flashcards (front: objection / back: response)</span>
+                <button onClick={() => setShowFcForm(!showFcForm)} className="text-xs text-gold-500 hover:text-gold-400 flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add
+                </button>
+              </div>
+              {flashcards.map(fc => (
+                <div key={fc.id} className="text-xs text-white/50 flex items-start gap-2">
+                  <div className="flex-1">
+                    <div className="text-red-400">Q: {fc.front_text}</div>
+                    <div className="text-emerald-400">A: {fc.back_text}</div>
+                  </div>
+                  <button onClick={async () => { await supabase.from('lms_flashcards').delete().eq('id', fc.id); loadExtras(); }} className="text-white/20 hover:text-red-400">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {showFcForm && (
+                <FlashcardForm lessonId={lesson.id} sortOrder={flashcards.length} onSaved={() => { setShowFcForm(false); loadExtras(); }} />
+              )}
             </div>
+          )}
+
+          {/* ── Attachment (PDF / Audio) ── */}
+          {form.content_kind === 'asset' && (
             <div>
-              <label className="block text-xs text-white/50 mb-1 uppercase">Duration (sec)</label>
-              <input type="number" min={0} value={form.video_duration_sec} onChange={(e) => setForm(f => ({ ...f, video_duration_sec: Number(e.target.value) }))} className="input-dark w-full text-sm" />
+              <label className="block text-xs text-white/50 mb-1 uppercase">Attachment (PDF or Audio)</label>
+              <AssetUploader
+                assetType={form.asset_type}
+                assetUrl={form.asset_url}
+                storagePath={form.asset_storage_path}
+                onUploaded={(url, path, type) => setForm(f => ({ ...f, asset_url: url, asset_storage_path: path, asset_type: type }))}
+                onClear={() => setForm(f => ({ ...f, asset_url: null, asset_storage_path: null, asset_type: null }))}
+              />
             </div>
-          </div>
-
-          {/* Dual video engine */}
-          <div>
-            <label className="block text-xs text-white/50 mb-1 uppercase">External Video URL (YouTube / Vimeo / Google Drive)</label>
-            <input value={form.video_url} onChange={(e) => setForm(f => ({ ...f, video_url: e.target.value }))} className="input-dark w-full text-sm" placeholder="https://youtube.com/watch?v=…" />
-          </div>
-          <div>
-            <label className="block text-xs text-white/50 mb-1 uppercase">Or upload a video file</label>
-            <AssetUploader
-              assetType={form.asset_type}
-              assetUrl={form.asset_url}
-              storagePath={form.asset_storage_path}
-              onUploaded={(url, path) => setForm(f => ({ ...f, asset_url: url, asset_storage_path: path }))}
-              onClear={() => setForm(f => ({ ...f, asset_url: null, asset_storage_path: null, asset_type: null }))}
-            />
-          </div>
-
-          {/* Unskippable toggle */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.unskippable} onChange={(e) => setForm(f => ({ ...f, unskippable: e.target.checked }))} className="w-4 h-4 rounded accent-gold-500" />
-            <span className="text-sm text-white/70 flex items-center gap-1"><Lock className="w-3.5 h-3.5 text-amber-400" /> Unskippable (reveal completion only after full playback)</span>
-          </label>
-
-          {/* Reflection */}
-          <div>
-            <label className="block text-xs text-white/50 mb-1 uppercase">Reflection Prompt (leave empty to skip)</label>
-            <textarea value={form.reflection_prompt} onChange={(e) => setForm(f => ({ ...f, reflection_prompt: e.target.value }))} rows={2} className="input-dark w-full resize-none text-sm" placeholder="e.g. Summarize the 3-step closing technique you just learned." />
-          </div>
+          )}
 
           <button onClick={save} disabled={saving} className="btn-gold flex items-center gap-2 text-sm">
-            <Save className="w-4 h-4" /> Save Lesson
+            <Save className="w-4 h-4" /> Save Element
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Checkpoint Form (MCQ) ────────────────────────────────────────────────────
+function CheckpointForm({ lessonId, onSaved }: { lessonId: string; onSaved: () => void }) {
+  const [question, setQuestion] = useState('');
+  const [timestamp, setTimestamp] = useState(0);
+  const [options, setOptions] = useState<string[]>(['', '']);
+  const [correctIdx, setCorrectIdx] = useState(0);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!question.trim() || options.filter(o => o.trim()).length < 2) return;
+    setSaving(true);
+    await supabase.from('lms_checkpoints').insert({
+      lesson_id: lessonId,
+      question: question.trim(),
+      timestamp_sec: Number(timestamp),
+      options: options.map(o => o.trim()).filter(Boolean),
+      correct_option_index: correctIdx,
+    });
+    setSaving(false);
+    onSaved();
+  }
+
+  return (
+    <div className="rounded-lg bg-white/5 p-3 space-y-2">
+      <input value={question} onChange={(e) => setQuestion(e.target.value)} className="input-dark w-full text-sm" placeholder="Question text" />
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs text-white/50 mb-1 uppercase">Timestamp (sec)</label>
+          <input type="number" min={0} value={timestamp} onChange={(e) => setTimestamp(Number(e.target.value))} className="input-dark w-full text-sm" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        {options.map((opt, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCorrectIdx(i)}
+              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${correctIdx === i ? 'border-emerald-500 bg-emerald-500/20' : 'border-white/20'}`}
+            >
+              {correctIdx === i && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
+            </button>
+            <input
+              value={opt}
+              onChange={(e) => setOptions(prev => prev.map((o, idx) => idx === i ? e.target.value : o))}
+              className="input-dark w-full text-sm"
+              placeholder={`Option ${i + 1}`}
+            />
+            {options.length > 2 && (
+              <button type="button" onClick={() => { setOptions(prev => prev.filter((_, idx) => idx !== i)); if (correctIdx >= i && correctIdx > 0) setCorrectIdx(correctIdx - 1); }} className="text-white/20 hover:text-red-400">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={() => setOptions(prev => [...prev, ''])} className="text-xs text-gold-500 hover:text-gold-400 flex items-center gap-1">
+          <Plus className="w-3 h-3" /> Add option
+        </button>
+      </div>
+      <button onClick={save} disabled={saving} className="btn-gold text-xs px-3 py-1.5 flex items-center gap-1">
+        <Save className="w-3 h-3" /> Save Checkpoint
+      </button>
+    </div>
+  );
+}
+
+// ── Flashcard Form ───────────────────────────────────────────────────────────
+function FlashcardForm({ lessonId, sortOrder, onSaved }: { lessonId: string; sortOrder: number; onSaved: () => void }) {
+  const [front, setFront] = useState('');
+  const [back, setBack] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!front.trim() || !back.trim()) return;
+    setSaving(true);
+    await supabase.from('lms_flashcards').insert({
+      lesson_id: lessonId,
+      front_text: front.trim(),
+      back_text: back.trim(),
+      sort_order: sortOrder,
+    });
+    setSaving(false);
+    onSaved();
+  }
+
+  return (
+    <div className="rounded-lg bg-white/5 p-3 space-y-2">
+      <div>
+        <label className="block text-xs text-white/50 mb-1 uppercase">Objection (front)</label>
+        <textarea value={front} onChange={(e) => setFront(e.target.value)} rows={2} className="input-dark w-full text-sm resize-none" placeholder="e.g. It's too expensive." />
+      </div>
+      <div>
+        <label className="block text-xs text-white/50 mb-1 uppercase">Approved Response (back)</label>
+        <textarea value={back} onChange={(e) => setBack(e.target.value)} rows={2} className="input-dark w-full text-sm resize-none" placeholder="e.g. Let me show you the ROI breakdown…" />
+      </div>
+      <button onClick={save} disabled={saving} className="btn-gold text-xs px-3 py-1.5 flex items-center gap-1">
+        <Save className="w-3 h-3" /> Save Flashcard
+      </button>
     </div>
   );
 }
