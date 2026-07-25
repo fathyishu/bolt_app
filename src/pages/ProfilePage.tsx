@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, History, Award, Users, Star, Flame, Trophy, CreditCard as Edit2, Check, X, TrendingUp, Target, Calendar, Shield, ChevronRight, Zap, Lock, DollarSign } from 'lucide-react';
+import { User, History, Award, Users, Star, Flame, Trophy, CreditCard as Edit2, Check, X, TrendingUp, Target, Calendar, Shield, ChevronRight, Zap, Lock, DollarSign, Sun, Moon } from 'lucide-react';
 import { supabase, Profile, CycleSnapshot, PerformanceCycle, MonthlyTarget, getCommissionRate } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLevels } from '../contexts/LevelsContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 type Tab = 'about' | 'history' | 'achievements' | 'team';
 
@@ -66,6 +67,7 @@ interface Props { viewUserId?: string }
 export default function ProfilePage({ viewUserId }: Props) {
   const { profile: me, refreshProfile } = useAuth();
   const { getLevel, levels: LEVELS } = useLevels();
+  const { theme, setTheme } = useTheme();
   const [tab, setTab] = useState<Tab>('about');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [snapshots, setSnapshots] = useState<(CycleSnapshot & { cycle: PerformanceCycle })[]>([]);
@@ -207,6 +209,51 @@ export default function ProfilePage({ viewUserId }: Props) {
           {/* ── About ── */}
           {tab === 'about' && (
             <div className="space-y-4">
+              {/* Ch5: Theme Settings card */}
+              {isOwnProfile && (
+                <div className="glass-card p-5">
+                  <h3 className="text-white font-semibold flex items-center gap-2 mb-4">
+                    <Sun className="w-4 h-4 text-gold-500" /> Theme Settings
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setTheme('dark')}
+                      className={`relative p-4 rounded-2xl border-2 transition-all text-left ${
+                        theme === 'dark'
+                          ? 'border-gold-500/50 bg-gold-500/10 shadow-gold'
+                          : 'border-white/10 bg-surface-50/30 hover:border-white/20'
+                      }`}
+                    >
+                      <Moon className={`w-6 h-6 mb-2 ${theme === 'dark' ? 'text-gold-500' : 'text-white/40'}`} />
+                      <div className={`font-medium text-sm ${theme === 'dark' ? 'text-gold-500' : 'text-white/60'}`}>Dark Mode</div>
+                      <div className="text-white/30 text-xs mt-0.5">Classic gold-on-black</div>
+                      {theme === 'dark' && (
+                        <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-gold-500/20 flex items-center justify-center">
+                          <Check className="w-3 h-3 text-gold-500" />
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setTheme('light')}
+                      className={`relative p-4 rounded-2xl border-2 transition-all text-left ${
+                        theme === 'light'
+                          ? 'border-gold-500/50 bg-gold-500/10 shadow-gold'
+                          : 'border-white/10 bg-surface-50/30 hover:border-white/20'
+                      }`}
+                    >
+                      <Sun className={`w-6 h-6 mb-2 ${theme === 'light' ? 'text-gold-500' : 'text-white/40'}`} />
+                      <div className={`font-medium text-sm ${theme === 'light' ? 'text-gold-500' : 'text-white/60'}`}>Light Mode</div>
+                      <div className="text-white/30 text-xs mt-0.5">Bright and clean</div>
+                      {theme === 'light' && (
+                        <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-gold-500/20 flex items-center justify-center">
+                          <Check className="w-3 h-3 text-gold-500" />
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="glass-card p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white font-semibold flex items-center gap-2">

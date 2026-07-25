@@ -64,13 +64,13 @@
   .light .text-white {
     @apply text-black;
   }
-  .light .text-white\/40 { @apply text-black\/40; }
-  .light .text-white\/50 { @apply text-black\/50; }
-  .light .text-white\/70 { @apply text-black\/70; }
-  .light .bg-surface-50\/30 { @apply bg-black\/5; }
-  .light .bg-surface-50\/50 { @apply bg-black\/5; }
-  .light .border-white\/5 { @apply border-black\/5; }
-  .light .border-white\/10 { @apply border-black\/10; }
+  .light .text-white\/40 { color: rgba(0,0,0,0.4); }
+  .light .text-white\/50 { color: rgba(0,0,0,0.5); }
+  .light .text-white\/70 { color: rgba(0,0,0,0.7); }
+  .light .bg-surface-50\/30 { background-color: rgba(0,0,0,0.05); }
+  .light .bg-surface-50\/50 { background-color: rgba(0,0,0,0.05); }
+  .light .border-white\/5 { border-color: rgba(0,0,0,0.05); }
+  .light .border-white\/10 { border-color: rgba(0,0,0,0.1); }
 
   .glass-card {
     @apply bg-surface-200 border border-white/5 rounded-xl;

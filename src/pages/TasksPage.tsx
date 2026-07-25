@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, Calendar, Flag, ChevronDown, Grip, Users, User } from 'lucide-react';
+import { Plus, X, Calendar, Flag, ChevronDown, Grip, Users, User, Check } from 'lucide-react';
 import { supabase, Task, TaskStatus, Priority, Profile } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -37,6 +37,7 @@ export default function TasksPage() {
   const [saving, setSaving] = useState(false);
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
+  const [bulkAssignIds, setBulkAssignIds] = useState<string[]>([]); // Ch4: multi-person bulk assignment
 
   const canManage = profile?.role === 'admin' || profile?.role === 'manager';
 
@@ -62,6 +63,7 @@ export default function TasksPage() {
   function openCreate(defaultStatus?: TaskStatus) {
     setEditTask(null);
     setForm({ ...EMPTY_FORM, status: defaultStatus ?? 'todo' });
+    setBulkAssignIds([]); // Ch4: reset bulk selection on new task
     setShowModal(true);
   }
 
@@ -90,15 +92,31 @@ export default function TasksPage() {
       status: form.status,
       priority: form.priority,
       due_date: form.due_date || null,
-      assign_to_team: form.assign_to_team,
-      assigned_to: form.assign_to_team ? null : (form.assigned_to || null),
       updated_at: new Date().toISOString(),
     };
 
     if (editTask) {
-      await supabase.from('tasks').update(payload).eq('id', editTask.id);
+      await supabase.from('tasks').update({
+        ...payload,
+        assign_to_team: form.assign_to_team,
+        assigned_to: form.assign_to_team ? null : (form.assigned_to || null),
+      }).eq('id', editTask.id);
+    } else if (bulkAssignIds.length > 0) {
+      // Ch4: bulk multi-person assignment — create a duplicate task for each selected staff member
+      const rows = bulkAssignIds.map((uid) => ({
+        ...payload,
+        assign_to_team: false,
+        assigned_to: uid,
+        created_by: profile.id,
+      }));
+      await supabase.from('tasks').insert(rows);
     } else {
-      await supabase.from('tasks').insert({ ...payload, created_by: profile.id });
+      await supabase.from('tasks').insert({
+        ...payload,
+        assign_to_team: form.assign_to_team,
+        assigned_to: form.assign_to_team ? null : (form.assigned_to || null),
+        created_by: profile.id,
+      });
     }
 
     await fetchTasks();
@@ -383,7 +401,10 @@ export default function TasksPage() {
                     {/* Team toggle */}
                     <button
                       type="button"
-                      onClick={() => setForm((f) => ({ ...f, assign_to_team: !f.assign_to_team, assigned_to: '' }))}
+                      onClick={() => {
+                        setForm((f) => ({ ...f, assign_to_team: !f.assign_to_team, assigned_to: '' }));
+                        setBulkAssignIds([]);
+                      }}
                       className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
                         form.assign_to_team
                           ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
@@ -400,7 +421,73 @@ export default function TasksPage() {
                     </button>
 
                     {/* Individual rep picker */}
-                    {!form.assign_to_team && (
+                    {!form.assign_to_team && !editTask && (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <select
+                            value={form.assigned_to}
+                            onChange={(e) => { setForm({ ...form, assigned_to: e.target.value }); setBulkAssignIds([]); }}
+                            className="input-dark w-full appearance-none pr-8"
+                          >
+                            <option value="">— Select one person —</option>
+                            {reps.map((r) => (
+                              <option key={r.id} value={r.id}>{r.full_name} ({r.role.replace('_', ' ')})</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+                        </div>
+
+                        {/* Ch4: Bulk multi-person assignment */}
+                        <div className="rounded-xl border border-white/10 bg-surface-50/30 p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-white/50 uppercase tracking-wider">Or assign to multiple</span>
+                            <button
+                              type="button"
+                              onClick={() => setBulkAssignIds(prev => prev.length === reps.length ? [] : reps.map(r => r.id))}
+                              className="text-xs text-gold-500 hover:text-gold-400 font-medium"
+                            >
+                              {bulkAssignIds.length === reps.length ? 'Clear All' : 'Select All'}
+                            </button>
+                          </div>
+                          <div className="max-h-40 overflow-y-auto space-y-1">
+                            {reps.map((r) => {
+                              const checked = bulkAssignIds.includes(r.id);
+                              return (
+                                <button
+                                  key={r.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setBulkAssignIds(prev =>
+                                      prev.includes(r.id) ? prev.filter(id => id !== r.id) : [...prev, r.id]
+                                    );
+                                    setForm(f => ({ ...f, assigned_to: '' }));
+                                  }}
+                                  className={`w-full flex items-center gap-2.5 p-2 rounded-lg text-left transition-all ${
+                                    checked ? 'bg-gold-500/10 text-gold-500' : 'text-white/60 hover:bg-white/5'
+                                  }`}
+                                >
+                                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                                    checked ? 'bg-gold-500 border-gold-500' : 'border-white/20'
+                                  }`}>
+                                    {checked && <Check className="w-3 h-3 text-dark-400" />}
+                                  </div>
+                                  <span className="text-sm truncate">{r.full_name}</span>
+                                  <span className="text-white/30 text-xs ml-auto capitalize">{r.role.replace('_', ' ')}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {bulkAssignIds.length > 0 && (
+                            <div className="text-xs text-gold-500 font-medium">
+                              {bulkAssignIds.length} {bulkAssignIds.length === 1 ? 'person' : 'people'} selected — a copy will be created for each.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Individual rep picker (edit mode — single only) */}
+                    {!form.assign_to_team && editTask && (
                       <div className="relative">
                         <select
                           value={form.assigned_to}

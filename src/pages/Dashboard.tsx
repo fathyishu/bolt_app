@@ -209,13 +209,13 @@ export default function Dashboard() {
       if (lb) setLeaderboard(lb as typeof leaderboard);
 
       // Ch2: monthly targets for this user/month
-      const now = new Date();
+      const nowForTargets = new Date();
       const { data: mt } = await supabase
         .from('monthly_targets')
         .select('target1, target2, target3')
         .eq('user_id', profile.id)
-        .eq('month', now.getMonth() + 1)
-        .eq('year', now.getFullYear())
+        .eq('month', nowForTargets.getMonth() + 1)
+        .eq('year', nowForTargets.getFullYear())
         .maybeSingle();
       if (mt) setTargets(mt as typeof targets);
     }
