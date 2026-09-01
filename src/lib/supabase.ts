@@ -32,6 +32,8 @@ export interface Profile {
   role: Role;
   lifetime_pieces: number;
   monthly_pieces: number;
+  lifetime_leads: number;
+  monthly_leads: number;
   current_streak: number;
   last_eod_date: string | null;
   sunday_super_streak: boolean;
@@ -114,6 +116,16 @@ export interface EodReport {
   positive_chats: number;
   billed_clients: number;
   total_pieces: number;
+  total_leads: number;
+  new_leads: number;
+  avg_response_time_min: number;
+  sample_orders: number;
+  samples_converted: number;
+  all_chats_cleared: boolean;
+  total_current_bills: number;
+  new_billed_today: number;
+  pending_bills: number;
+  repeat_clients_count: number;
   pieces_sold: number;
   closed_deals: number;
   new_leads_contacted: number;

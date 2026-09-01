@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, CheckCircle, Phone, MessageSquare, Users, Package, FileText, RefreshCw, Calendar, Clock, History } from 'lucide-react';
+import { Send, CheckCircle, Phone, MessageSquare, Users, Package, FileText, RefreshCw, Calendar, Clock, History, TrendingUp, UserPlus, Timer, FlaskConical, CheckCircle2, IndianRupee, Receipt, Repeat } from 'lucide-react';
 import { supabase, EodReport } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -11,6 +11,16 @@ const EMPTY_FORM = {
   positive_chats: 0,
   billed_clients: 0,
   total_pieces: 0,
+  total_leads: 0,
+  new_leads: 0,
+  avg_response_time_min: 0,
+  sample_orders: 0,
+  samples_converted: 0,
+  all_chats_cleared: false,
+  total_current_bills: 0,
+  new_billed_today: 0,
+  pending_bills: 0,
+  repeat_clients_count: 0,
   daily_notes: '',
 };
 
@@ -28,6 +38,15 @@ const FIELDS: FieldConfig[] = [
   { key: 'positive_chats',  label: 'Positive Chats',   icon: <MessageSquare className="w-4 h-4" />, color: '#8b5cf6' },
   { key: 'billed_clients',  label: 'Billed Clients',   icon: <Users className="w-4 h-4" />,          color: '#f97316' },
   { key: 'total_pieces',    label: 'Total Pieces',     icon: <Package className="w-4 h-4" />,        color: '#FFD700' },
+  { key: 'total_leads',     label: 'Total Leads',      icon: <TrendingUp className="w-4 h-4" />,     color: '#3b82f6' },
+  { key: 'new_leads',       label: 'New Leads',        icon: <UserPlus className="w-4 h-4" />,       color: '#10B981' },
+  { key: 'avg_response_time_min', label: 'Avg Response (min)', icon: <Timer className="w-4 h-4" />, color: '#f59e0b' },
+  { key: 'sample_orders',   label: 'Sample Orders',    icon: <FlaskConical className="w-4 h-4" />,   color: '#8b5cf6' },
+  { key: 'samples_converted', label: 'Samples Converted', icon: <CheckCircle2 className="w-4 h-4" />, color: '#06b6d4' },
+  { key: 'repeat_clients_count', label: 'Repeat Clients', icon: <Repeat className="w-4 h-4" />,     color: '#ec4899' },
+  { key: 'total_current_bills', label: 'Total Current Bills', icon: <IndianRupee className="w-4 h-4" />, color: '#f97316' },
+  { key: 'new_billed_today', label: 'New Billed Today', icon: <Receipt className="w-4 h-4" />,       color: '#10B981' },
+  { key: 'pending_bills',   label: 'Pending Bills',    icon: <Receipt className="w-4 h-4" />,        color: '#ef4444' },
 ];
 
 type EodTab = 'submit' | 'history' | 'full_history';
@@ -65,6 +84,16 @@ export default function EodPage() {
         positive_chats: report.positive_chats,
         billed_clients: report.billed_clients,
         total_pieces:   report.total_pieces,
+        total_leads:    report.total_leads,
+        new_leads:      report.new_leads,
+        avg_response_time_min: report.avg_response_time_min,
+        sample_orders:  report.sample_orders,
+        samples_converted: report.samples_converted,
+        all_chats_cleared: report.all_chats_cleared,
+        total_current_bills: report.total_current_bills,
+        new_billed_today: report.new_billed_today,
+        pending_bills:  report.pending_bills,
+        repeat_clients_count: report.repeat_clients_count,
         daily_notes:    report.daily_notes,
       });
       setSubmitted(true);
@@ -135,6 +164,16 @@ export default function EodPage() {
       accepted_calls: Number(form.accepted_calls),
       positive_chats: Number(form.positive_chats),
       billed_clients: Number(form.billed_clients),
+      total_leads:    Number(form.total_leads),
+      new_leads:      Number(form.new_leads),
+      avg_response_time_min: Number(form.avg_response_time_min),
+      sample_orders:  Number(form.sample_orders),
+      samples_converted: Number(form.samples_converted),
+      all_chats_cleared: form.all_chats_cleared,
+      total_current_bills: Number(form.total_current_bills),
+      new_billed_today: Number(form.new_billed_today),
+      pending_bills:  Number(form.pending_bills),
+      repeat_clients_count: Number(form.repeat_clients_count),
       submitted_at: new Date().toISOString(),
     };
 
@@ -280,6 +319,16 @@ export default function EodPage() {
                     </div>
                   ))}
                 </div>
+
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox"
+                      checked={form.all_chats_cleared}
+                      onChange={e => setForm({ ...form, all_chats_cleared: e.target.checked })}
+                      className="w-4 h-4 rounded accent-gold-500" />
+                    <span className="text-sm text-white/70">All chats cleared</span>
+                  </label>
+                </div>
               </div>
 
               <div className="glass-card p-5">
@@ -350,10 +399,23 @@ export default function EodPage() {
                           <span className="text-white/30 text-xs">Calls: {r.accepted_calls}</span>
                           <span className="text-white/30 text-xs">Billed: {r.billed_clients}</span>
                           <span className="text-white/30 text-xs">Chats: {r.positive_chats}</span>
+                          <span className="text-white/30 text-xs">Leads: {r.total_leads}</span>
+                          <span className="text-white/30 text-xs">New Leads: {r.new_leads}</span>
+                          <span className="text-white/30 text-xs">Response: {r.avg_response_time_min}m</span>
+                          <span className="text-white/30 text-xs">Samples: {r.sample_orders}</span>
+                          <span className="text-white/30 text-xs">Converted: {r.samples_converted}</span>
+                          <span className="text-white/30 text-xs">Repeat: {r.repeat_clients_count}</span>
+                          {r.all_chats_cleared && <span className="text-emerald-400 text-xs">Chats Cleared</span>}
+                          <span className="text-white/30 text-xs">Cur. Bills: ₹{Number(r.total_current_bills).toLocaleString('en-IN')}</span>
+                          <span className="text-white/30 text-xs">New Billed: ₹{Number(r.new_billed_today).toLocaleString('en-IN')}</span>
+                          <span className="text-white/30 text-xs">Pending: ₹{Number(r.pending_bills).toLocaleString('en-IN')}</span>
                           {r.rejection_reason && (
                             <span className="text-red-400/70 text-xs">Rejected: {r.rejection_reason}</span>
                           )}
                         </div>
+                        {r.daily_notes && (
+                          <div className="mt-2 text-white/30 text-xs truncate">“{r.daily_notes}”</div>
+                        )}
                       </div>
                     );
                   })}
@@ -410,8 +472,18 @@ export default function EodPage() {
                           <span className="text-white/30 text-xs">Calls: {r.accepted_calls}</span>
                           <span className="text-white/30 text-xs">Billed: {r.billed_clients}</span>
                           <span className="text-white/30 text-xs">Chats: {r.positive_chats}</span>
-                          {r.daily_notes && <span className="text-white/30 text-xs truncate max-w-xs">“{r.daily_notes}”</span>}
+                          <span className="text-white/30 text-xs">Leads: {r.total_leads}</span>
+                          <span className="text-white/30 text-xs">New Leads: {r.new_leads}</span>
+                          <span className="text-white/30 text-xs">Response: {r.avg_response_time_min}m</span>
+                          <span className="text-white/30 text-xs">Samples: {r.sample_orders}</span>
+                          <span className="text-white/30 text-xs">Converted: {r.samples_converted}</span>
+                          <span className="text-white/30 text-xs">Repeat: {r.repeat_clients_count}</span>
+                          {r.all_chats_cleared && <span className="text-emerald-400 text-xs">Chats Cleared</span>}
+                          <span className="text-white/30 text-xs">Cur. Bills: ₹{Number(r.total_current_bills).toLocaleString('en-IN')}</span>
+                          <span className="text-white/30 text-xs">New Billed: ₹{Number(r.new_billed_today).toLocaleString('en-IN')}</span>
+                          <span className="text-white/30 text-xs">Pending: ₹{Number(r.pending_bills).toLocaleString('en-IN')}</span>
                         </div>
+                        {r.daily_notes && <span className="text-white/30 text-xs truncate max-w-xs">“{r.daily_notes}”</span>}
                       </div>
                     );
                   })}

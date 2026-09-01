@@ -277,6 +277,18 @@ export default function LeadsPage() {
         owner_id: ownerId,
         last_follow_up: new Date().toISOString(),
       });
+
+      const { data: ownerProfile } = await supabase
+        .from('profiles')
+        .select('lifetime_leads, monthly_leads')
+        .eq('id', ownerId)
+        .maybeSingle();
+      if (ownerProfile) {
+        await supabase.from('profiles').update({
+          lifetime_leads: (ownerProfile.lifetime_leads || 0) + 1,
+          monthly_leads: (ownerProfile.monthly_leads || 0) + 1,
+        }).eq('id', ownerId);
+      }
     }
 
     await fetchLeads();
