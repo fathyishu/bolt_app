@@ -259,18 +259,12 @@ export default function LeadsPage() {
       await supabase.from('leads').update(payload).eq('id', editLead.id);
 
       if (prevStatus !== 'closed_lead' && form.status === 'closed_lead') {
-        const diff = form.pieces_count;
         const ownerId = editLead.owner_id ?? editLead.assigned_to ?? profile.id;
-        await supabase.from('profiles').update({
-          monthly_pieces: (profile.monthly_pieces || 0) + diff,
-          lifetime_pieces: (profile.lifetime_pieces || 0) + diff,
-        }).eq('id', ownerId);
-
         await supabase.from('closing_news_feed').insert({
           user_id: ownerId,
           staff_name: profile.full_name || 'Someone',
           lead_title: form.contact_name || form.title || 'a sale',
-          pieces_count: diff,
+          pieces_count: form.pieces_count,
         });
 
         confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#FFD700','#10B981','#ffffff','#f97316'] });
