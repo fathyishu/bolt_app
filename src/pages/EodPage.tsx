@@ -199,7 +199,7 @@ export default function EodPage() {
         await supabase.from('profiles').update({
           current_streak:   Number(form.total_pieces) > 0 ? Math.max(newStreak, 1) : (isSunday ? profile.current_streak : 0),
           last_eod_date:    today,
-          sunday_super_streak: sundayGlow,
+          sunday_super_streak: sundayGlow
         }).eq('id', profile.id);
 
         await refreshProfile();
