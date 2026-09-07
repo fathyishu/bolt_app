@@ -200,8 +200,6 @@ export default function EodPage() {
           current_streak:   Number(form.total_pieces) > 0 ? Math.max(newStreak, 1) : (isSunday ? profile.current_streak : 0),
           last_eod_date:    today,
           sunday_super_streak: sundayGlow,
-          monthly_pieces:  (profile.monthly_pieces || 0) + Number(form.total_pieces),
-          lifetime_pieces: (profile.lifetime_pieces || 0) + Number(form.total_pieces),
         }).eq('id', profile.id);
 
         await refreshProfile();
